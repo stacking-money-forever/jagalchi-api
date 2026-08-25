@@ -1,0 +1,59 @@
+{
+  "name": "@jagalchi/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Jagalchi modular Nest.js API",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "migration:run": "tsx src/database/run-migrations.ts",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@apple/app-store-server-library": "3.1.0",
+    "@aws-sdk/client-s3": "^3.1116.0",
+    "@aws-sdk/s3-request-presigner": "^3.1116.0",
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/jwt": "^11.0.1",
+    "@nestjs/passport": "^11.0.5",
+    "@nestjs/platform-express": "^11.1.8",
+    "@nestjs/platform-socket.io": "^11.1.8",
+    "@nestjs/swagger": "^11.2.1",
+    "@nestjs/typeorm": "^11.0.0",
+    "@nestjs/websockets": "^11.1.8",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "google-auth-library": "11.0.2",
+    "helmet": "^8.1.0",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "pg": "^8.16.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "socket.io": "^4.8.1",
+    "typeorm": "^0.3.27"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.7",
+    "@nestjs/cli": "^11.0.10",
+    "@nestjs/testing": "^11.1.0",
+    "@types/node": "^24.0.0",
+    "@types/passport-jwt": "^4.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.50.0",
+    "@typescript-eslint/parser": "^8.50.0",
+    "eslint": "^9.39.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.0",
+    "vitest": "^4.0.0"
+  }
+}
