@@ -32,6 +32,25 @@ import { CreateRealtimeDomain1770000004000 } from './migrations/1770000004000-cr
 import { UploadAsset } from '../uploads/upload-asset.entity';
 import { CreateUploadsDomain1770000005000 } from './migrations/1770000005000-create-uploads-domain';
 import { CreateTicketPurchases1770000006000 } from './migrations/1770000006000-create-ticket-purchases';
+import {
+  CareerEvidence,
+  CareerTarget,
+  CommandIdempotencyKey,
+  ProofCriterion,
+  ProofMission,
+  ProofProfile,
+  ProofReview,
+  ProofVerificationRun,
+  PublishedProof,
+} from '../career/career.entities';
+import { CreateCareerDomain1770000007000 } from './migrations/1770000007000-create-career-domain';
+import {
+  GithubInstallation,
+  GithubInstallationClaimAttempt,
+  GithubInstallationRepository,
+  GithubWebhookDelivery,
+} from '../github/github.entities';
+import { CreateEvidenceExecution1770000008000 } from './migrations/1770000008000-create-evidence-execution';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -62,6 +81,19 @@ export const AppDataSource = new DataSource({
     RoadmapEvent,
     RoadmapSequence,
     UploadAsset,
+    CareerTarget,
+    CareerEvidence,
+    ProofMission,
+    ProofCriterion,
+    ProofVerificationRun,
+    ProofReview,
+    ProofProfile,
+    PublishedProof,
+    CommandIdempotencyKey,
+    GithubInstallationClaimAttempt,
+    GithubInstallation,
+    GithubInstallationRepository,
+    GithubWebhookDelivery,
   ],
   migrations: [
     CreateTicketLedger1770000000000,
@@ -71,6 +103,8 @@ export const AppDataSource = new DataSource({
     CreateRealtimeDomain1770000004000,
     CreateUploadsDomain1770000005000,
     CreateTicketPurchases1770000006000,
+    CreateCareerDomain1770000007000,
+    CreateEvidenceExecution1770000008000,
   ],
   migrationsTableName: 'jagalchi_migrations',
   ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: true } : false,
