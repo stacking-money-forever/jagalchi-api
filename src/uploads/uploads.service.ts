@@ -11,6 +11,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -22,9 +23,9 @@ import { UploadAsset, UploadPurpose, UploadStatus } from './upload-asset.entity'
 
 @Injectable()
 export class UploadsService {
-  private readonly bucket: string;
-  private readonly client: S3Client;
-  private readonly publicBaseUrl: URL;
+  private readonly bucket: string | null;
+  private readonly client: S3Client | null;
+  private readonly publicBaseUrl: URL | null;
 
   constructor(
     config: ConfigService,
@@ -32,6 +33,12 @@ export class UploadsService {
     @InjectRepository(UploadAsset)
     private readonly assets: Repository<UploadAsset>,
   ) {
+    if (config.get<string>('UPLOADS_ENABLED') === 'false') {
+      this.bucket = null;
+      this.client = null;
+      this.publicBaseUrl = null;
+      return;
+    }
     this.bucket = config.getOrThrow<string>('OBJECT_STORAGE_BUCKET');
     this.publicBaseUrl = new URL(
       config.getOrThrow<string>('OBJECT_STORAGE_PUBLIC_BASE_URL'),
@@ -51,6 +58,7 @@ export class UploadsService {
   }
 
   async createUpload(ownerId: string, dto: CreateUploadDto) {
+    const { bucket, client } = this.requireStorage();
     if (dto.purpose === UploadPurpose.ProfileImage) {
       if (dto.roadmapId || !dto.contentType.startsWith('image/')) {
         throw new BadRequestException('Profile uploads must be an image');
@@ -80,9 +88,9 @@ export class UploadsService {
       }),
     );
     const uploadUrl = await getSignedUrl(
-      this.client,
+      client,
       new PutObjectCommand({
-        Bucket: this.bucket,
+        Bucket: bucket,
         Key: objectKey,
         ContentType: dto.contentType,
         ContentLength: dto.size,
@@ -99,16 +107,17 @@ export class UploadsService {
   }
 
   async complete(ownerId: string, assetId: string) {
+    const { bucket, client } = this.requireStorage();
     const asset = await this.getOwned(ownerId, assetId);
-    const object = await this.client.send(
-      new HeadObjectCommand({ Bucket: this.bucket, Key: asset.objectKey }),
+    const object = await client.send(
+      new HeadObjectCommand({ Bucket: bucket, Key: asset.objectKey }),
     );
     if (
       object.ContentLength !== asset.expectedSize ||
       object.ContentType !== asset.contentType
     ) {
-      await this.client.send(
-        new DeleteObjectCommand({ Bucket: this.bucket, Key: asset.objectKey }),
+      await client.send(
+        new DeleteObjectCommand({ Bucket: bucket, Key: asset.objectKey }),
       );
       await this.assets.delete({ id: asset.id });
       throw new BadRequestException('Uploaded object does not match the approved file');
@@ -119,14 +128,15 @@ export class UploadsService {
   }
 
   async getDownload(ownerId: string, assetId: string) {
+    const { bucket, client } = this.requireStorage();
     const asset = await this.getOwned(ownerId, assetId);
     if (asset.status !== UploadStatus.Ready) {
       throw new BadRequestException('Upload is not complete');
     }
     const downloadUrl = await getSignedUrl(
-      this.client,
+      client,
       new GetObjectCommand({
-        Bucket: this.bucket,
+        Bucket: bucket,
         Key: asset.objectKey,
         ResponseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(asset.fileName)}`,
       }),
@@ -136,11 +146,26 @@ export class UploadsService {
   }
 
   async remove(ownerId: string, assetId: string): Promise<void> {
+    const { bucket, client } = this.requireStorage();
     const asset = await this.getOwned(ownerId, assetId);
-    await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: asset.objectKey }),
+    await client.send(
+      new DeleteObjectCommand({ Bucket: bucket, Key: asset.objectKey }),
     );
     await this.assets.delete({ id: asset.id });
+  }
+
+  private requireStorage(): { bucket: string; client: S3Client; publicBaseUrl: URL } {
+    if (!this.bucket || !this.client || !this.publicBaseUrl) {
+      throw new ServiceUnavailableException({
+        code: 'UPLOADS_DISABLED',
+        message: 'Uploads are unavailable',
+      });
+    }
+    return {
+      bucket: this.bucket,
+      client: this.client,
+      publicBaseUrl: this.publicBaseUrl,
+    };
   }
 
   private async getOwned(ownerId: string, assetId: string): Promise<UploadAsset> {
@@ -159,6 +184,7 @@ export class UploadsService {
   }
 
   private toResponse(asset: UploadAsset) {
+    const { publicBaseUrl } = this.requireStorage();
     const publicUrl =
       asset.status === UploadStatus.Ready &&
       asset.purpose === UploadPurpose.ProfileImage
@@ -167,7 +193,7 @@ export class UploadsService {
               .split('/')
               .map((part) => encodeURIComponent(part))
               .join('/'),
-            this.publicBaseUrl,
+            publicBaseUrl,
           ).toString()
         : null;
     return {

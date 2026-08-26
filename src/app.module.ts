@@ -1,17 +1,22 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AuthModule } from './auth/auth.module';
 import { AiModule } from './ai/ai.module';
-import { HealthModule } from './health/health.module';
-import { validateEnvironment } from './shared/config/environment';
-import { TicketsModule } from './tickets/tickets.module';
-import { RoadmapsModule } from './roadmaps/roadmaps.module';
-import { SocialModule } from './social/social.module';
-import { RealtimeModule } from './realtime/realtime.module';
-import { UploadsModule } from './uploads/uploads.module';
+import { AuthModule } from './auth/auth.module';
 import { CareerModule } from './career/career.module';
+import { postgresExtra, postgresSsl } from './database/postgres-options';
 import { GithubModule } from './github/github.module';
+import { HealthModule } from './health/health.module';
+import { RealtimeModule } from './realtime/realtime.module';
+import { RoadmapsModule } from './roadmaps/roadmaps.module';
+import { validateEnvironment } from './shared/config/environment';
+import { createRateLimitOptions } from './shared/rate-limit/rate-limit';
+import { SocialModule } from './social/social.module';
+import { TicketsModule } from './tickets/tickets.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -27,13 +32,16 @@ import { GithubModule } from './github/github.module';
         url: config.getOrThrow<string>('DATABASE_URL'),
         autoLoadEntities: true,
         synchronize: config.get<string>('DATABASE_SYNCHRONIZE') === 'true',
-        ssl:
-          config.get<string>('DATABASE_SSL') === 'true'
-            ? { rejectUnauthorized: true }
-            : false,
+        ssl: postgresSsl(config.get<string>('DATABASE_SSL') === 'true'),
+        extra: postgresExtra(config, false),
       }),
     }),
     AuthModule,
+    ThrottlerModule.forRootAsync({
+      imports: [AuthModule],
+      inject: [JwtService, ConfigService],
+      useFactory: createRateLimitOptions,
+    }),
     AiModule,
     HealthModule,
     TicketsModule,
@@ -44,5 +52,6 @@ import { GithubModule } from './github/github.module';
     GithubModule,
     CareerModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

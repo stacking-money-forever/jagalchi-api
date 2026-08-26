@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@aws-sdk/s3-request-presigner', () => ({
@@ -29,6 +30,40 @@ describe('UploadsService', () => {
   };
 
   beforeEach(() => vi.clearAllMocks());
+
+  it('fails closed before creating metadata when uploads are disabled', async () => {
+    const disabledConfig = {
+      get: vi.fn((key: string) => (key === 'UPLOADS_ENABLED' ? 'false' : undefined)),
+      getOrThrow: vi.fn(),
+    };
+    const service = new UploadsService(
+      disabledConfig as never,
+      roadmaps as never,
+      assets as never,
+    );
+
+    await expect(
+      service.createUpload('user-1', {
+        fileName: 'blocked.pdf',
+        purpose: UploadPurpose.RoadmapAttachment,
+        contentType: 'application/pdf',
+        size: 128,
+        roadmapId: '22222222-2222-4222-8222-222222222222',
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    for (const operation of [
+      service.complete('user-1', 'asset-1'),
+      service.getDownload('user-1', 'asset-1'),
+      service.remove('user-1', 'asset-1'),
+    ]) {
+      await expect(operation).rejects.toBeInstanceOf(ServiceUnavailableException);
+    }
+
+    expect(disabledConfig.getOrThrow).not.toHaveBeenCalled();
+    expect(assets.save).not.toHaveBeenCalled();
+    expect(roadmaps.getOwned).not.toHaveBeenCalled();
+  });
 
   it('authorizes a roadmap attachment before issuing a bounded PUT URL', async () => {
     const service = new UploadsService(config as never, roadmaps as never, assets as never);

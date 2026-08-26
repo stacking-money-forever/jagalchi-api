@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { RealtimeGateway } from './realtime.gateway';
+import { RealtimeGateway, resolveRealtimeClientIp } from './realtime.gateway';
 
 const roadmapId = '11111111-1111-4111-8111-111111111111';
 
@@ -72,5 +72,17 @@ describe('RealtimeGateway room broadcasts', () => {
       roadmapId,
       actorId: client.data.userId,
     });
+  });
+});
+
+
+describe('resolveRealtimeClientIp', () => {
+  it('uses only the socket peer in conservative baseline mode', () => {
+    expect(resolveRealtimeClientIp('10.0.0.2', '198.51.100.1', 0)).toBe('10.0.0.2');
+  });
+
+  it('uses the exact proven hop count and rejects missing hops', () => {
+    expect(resolveRealtimeClientIp('10.0.0.2', '198.51.100.1', 1)).toBe('198.51.100.1');
+    expect(resolveRealtimeClientIp('10.0.0.2', undefined, 1)).toBeNull();
   });
 });

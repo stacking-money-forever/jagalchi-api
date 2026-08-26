@@ -1,4 +1,8 @@
-import { BadGatewayException, BadRequestException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AiJobsService } from './ai-jobs.service';
 
@@ -21,6 +25,26 @@ describe('AiJobsService', () => {
     const service = new AiJobsService(config as never, tickets as never, tokens as never);
     return { config, service, tickets, tokens };
   };
+
+  it('fails closed before payload validation, tickets, tokens, or network when AI is disabled', async () => {
+    const subject = createSubject();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    subject.config.get.mockImplementation((key: string) =>
+      key === 'AI_FEATURES_ENABLED' ? 'false' : 1_000,
+    );
+
+    await expect(
+      subject.service.run('user-1', 'deep_search', 'request-disabled', {
+        invalid: 'payload validation must not run',
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    expect(subject.tickets.reserveAiUsage).not.toHaveBeenCalled();
+    expect(subject.tokens.issue).not.toHaveBeenCalled();
+    expect(subject.config.getOrThrow).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
   it('commits a reservation only after the AI service succeeds', async () => {
     const subject = createSubject();

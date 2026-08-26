@@ -51,6 +51,7 @@ import {
   GithubWebhookDelivery,
 } from '../github/github.entities';
 import { CreateEvidenceExecution1770000008000 } from './migrations/1770000008000-create-evidence-execution';
+import { postgresExtra, postgresSsl } from './postgres-options';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -107,5 +108,6 @@ export const AppDataSource = new DataSource({
     CreateEvidenceExecution1770000008000,
   ],
   migrationsTableName: 'jagalchi_migrations',
-  ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: true } : false,
+  ssl: postgresSsl(process.env.DATABASE_SSL === 'true'),
+  extra: postgresExtra({ get: (key: string) => process.env[key] }, true),
 });

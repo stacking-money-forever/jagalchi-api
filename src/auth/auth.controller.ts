@@ -33,6 +33,7 @@ import { AuthService } from './auth.service';
 import type { AuthUser } from './auth-user';
 import { CurrentUser } from './current-user.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { RateLimited } from '../shared/rate-limit/rate-limit';
 
 interface CookieResponse {
   cookie(
@@ -71,6 +72,7 @@ export class UsersController {
   constructor(private readonly auth: AuthService) {}
 
   @Post()
+  @RateLimited('entry')
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) response: CookieResponse) {
     const result = await this.auth.register(dto);
     this.setRefreshCookie(response, result.refreshToken);
@@ -102,12 +104,14 @@ export class UsersController {
   }
 
   @Post('verification')
+  @RateLimited('request')
   @HttpCode(204)
   async sendVerification(@Body() dto: SendEmailVerificationDto): Promise<void> {
     await this.auth.sendEmailVerification(dto);
   }
 
   @Patch('verification')
+  @RateLimited('completion')
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.auth.verifyEmail(dto);
   }
@@ -129,6 +133,7 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post('login')
+  @RateLimited('entry')
   @HttpCode(200)
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: CookieResponse) {
     const result = await this.auth.login(dto);
@@ -137,23 +142,27 @@ export class AuthController {
   }
 
   @Post('password-reset')
+  @RateLimited('request')
   @HttpCode(204)
   async sendPasswordReset(@Body() dto: SendEmailVerificationDto): Promise<void> {
     await this.auth.sendPasswordReset(dto);
   }
 
   @Patch('password-reset/verify')
+  @RateLimited('completion')
   verifyPasswordReset(@Body() dto: VerifyEmailDto) {
     return this.auth.verifyPasswordReset(dto);
   }
 
   @Patch('password-reset')
+  @RateLimited('completion')
   @HttpCode(204)
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<void> {
     await this.auth.resetPassword(dto);
   }
 
   @Patch('refresh')
+  @RateLimited('completion')
   async refresh(
     @Headers('cookie') cookie: string | undefined,
     @Res({ passthrough: true }) response: CookieResponse,
@@ -174,6 +183,7 @@ export class AuthController {
   }
 
   @Get('login/:provider')
+  @RateLimited('completion')
   @Redirect()
   async startOAuth(
     @Param('provider', new ParseEnumPipe(OAuthProvider)) provider: OAuthProvider,
@@ -186,6 +196,7 @@ export class AuthController {
   }
 
   @Get('callback/:provider')
+  @RateLimited('completion')
   @Redirect()
   async oauthCallback(
     @Param('provider', new ParseEnumPipe(OAuthProvider)) provider: OAuthProvider,
@@ -198,6 +209,7 @@ export class AuthController {
   }
 
   @Post('callback/apple')
+  @RateLimited('completion')
   @Redirect()
   async appleCallback(@Body() body: OAuthCallbackQueryDto) {
     return {
@@ -207,6 +219,7 @@ export class AuthController {
   }
 
   @Post('oauth/exchange')
+  @RateLimited('completion')
   @HttpCode(200)
   async exchangeOAuth(
     @Body() dto: OAuthExchangeDto,

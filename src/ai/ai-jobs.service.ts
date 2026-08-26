@@ -2,6 +2,7 @@ import {
   BadGatewayException,
   BadRequestException,
   Injectable,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AiFeature } from '../tickets/ticket-policy';
@@ -135,6 +136,12 @@ export class AiJobsService {
     payload: Record<string, unknown>,
     roadmapId?: string,
   ): Promise<unknown> {
+    if (this.config.get<string>('AI_FEATURES_ENABLED') === 'false') {
+      throw new ServiceUnavailableException({
+        code: 'AI_FEATURES_DISABLED',
+        message: 'AI features are unavailable',
+      });
+    }
     const safePayload = normalizePayload(feature, payload);
     const reservation = await this.tickets.reserveAiUsage(
       userId,
