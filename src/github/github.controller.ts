@@ -119,7 +119,12 @@ export class GithubController {
       throw new BadRequestException('Invalid installation claim command');
     }
     if (isCallbackCommand) {
-      return this.github.claimInstallation(user.id, state, installationId);
+      const claim = await this.github.claimInstallation(user.id, state, installationId);
+      return {
+        installationId: claim.installationId,
+        repositoryCount: claim.repositoryCount,
+        returnPath: claim.returnPath,
+      };
     }
     const identity = await this.identities.findOne({
       where: { userId: user.id, provider: OAuthProvider.Github },

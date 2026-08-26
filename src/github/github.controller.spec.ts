@@ -73,14 +73,24 @@ describe('GithubController', () => {
 
   it('claims an installation only with the complete callback command', async () => {
     const { controller, github, identities } = createController();
-    github.claimInstallation.mockResolvedValue({ installationId: 'installation-record-id' });
+    github.claimInstallation.mockResolvedValue({
+      installationId: 'installation-record-id',
+      githubInstallationId: '9007199254740995',
+      repositoryCount: 3,
+      returnPath: '/career/proofs',
+      ownerUserId: 'owner-user-id',
+    });
 
     const result = await controller.installationClaim(
       { id: 'owner-user-id' } as never,
       { state: 's'.repeat(32), installationId: '9007199254740995' },
     );
 
-    expect(result).toEqual({ installationId: 'installation-record-id' });
+    expect(JSON.stringify(result)).toBe(
+      '{"installationId":"installation-record-id","repositoryCount":3,"returnPath":"/career/proofs"}',
+    );
+    expect(result).not.toHaveProperty('githubInstallationId');
+    expect(result).not.toHaveProperty('ownerUserId');
     expect(github.claimInstallation).toHaveBeenCalledWith(
       'owner-user-id',
       's'.repeat(32),
