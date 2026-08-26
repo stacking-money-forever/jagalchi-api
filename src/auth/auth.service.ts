@@ -26,9 +26,29 @@ import {
   type JsonWebKey,
 } from 'node:crypto';
 import { promisify } from 'node:util';
-import { DataSource, ILike, IsNull, MoreThan, Repository } from 'typeorm';
+import { DataSource, ILike, In, IsNull, MoreThan, Repository } from 'typeorm';
 import { TicketsService } from '../tickets/tickets.service';
 import { Follow } from '../social/entities/social.entities';
+import {
+  CareerEvidence,
+  CareerTarget,
+  CareerTargetStatus,
+  ProofCriterion,
+  ProofCriterionType,
+  ProofMission,
+  ProofMissionState,
+  ProofProfile,
+  ProofProfileState,
+  ProofReview,
+  PublishedProof,
+  PublishedProofState,
+} from '../career/career.entities';
+import {
+  GithubInstallation,
+  GithubInstallationClaimAttempt,
+  GithubInstallationRepository,
+  GithubWebhookDelivery,
+} from '../github/github.entities';
 import {
   LoginDto,
   RegisterDto,
@@ -387,6 +407,7 @@ export class AuthService {
 
   async deleteAccount(userId: string): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
+      const now = new Date();
       const users = manager.getRepository(User);
       const user = await users.findOne({
         where: { id: userId },
@@ -404,7 +425,146 @@ export class AuthService {
       await manager.getRepository(OAuthIdentity).delete({ userId });
       await manager.getRepository(RefreshSession).update(
         { userId, revokedAt: IsNull() },
-        { revokedAt: new Date() },
+        { revokedAt: now },
+      );
+      await manager.getRepository(CareerTarget).update(
+        { userId },
+        {
+          company: 'Archived',
+          role: 'Archived',
+          postingUrl: null,
+          requirements: '',
+          status: CareerTargetStatus.Archived,
+        },
+      );
+      const evidence = manager.getRepository(CareerEvidence);
+      await evidence.update(
+        { userId },
+        {
+          title: 'Archived evidence',
+          url: 'https://deleted.invalid/',
+          description: '',
+          reviewNote: null,
+        },
+      );
+      await evidence.update(
+        { reviewerId: userId },
+        { reviewNote: null },
+      );
+
+      const missions = manager.getRepository(ProofMission);
+      const ownedMissions = await missions.find({
+        where: { ownerUserId: userId },
+        select: { id: true },
+      });
+      const missionIds = ownedMissions.map(({ id }) => id);
+      if (missionIds.length > 0) {
+        const criteria = manager.getRepository(ProofCriterion);
+        const ownedCriteria = await criteria.find({
+          where: { missionId: In(missionIds) },
+        });
+        for (const criterion of ownedCriteria) {
+          switch (criterion.type) {
+            case ProofCriterionType.MergedPr:
+              criterion.config = {};
+              break;
+            case ProofCriterionType.BaseBranch:
+              criterion.config = { branch: 'redacted' };
+              break;
+            case ProofCriterionType.ChangedPath:
+              criterion.config = { glob: 'redacted' };
+              break;
+            case ProofCriterionType.NamedCheck:
+              criterion.config = { context: 'redacted' };
+              break;
+            case ProofCriterionType.HumanCheck:
+              criterion.config = { label: 'Redacted criterion' };
+              break;
+          }
+        }
+        await criteria.save(ownedCriteria);
+
+        const publications = manager.getRepository(PublishedProof);
+        const ownedPublications = await publications.find({
+          where: { missionId: In(missionIds) },
+        });
+        for (const publication of ownedPublications) {
+          publication.state = PublishedProofState.Unpublished;
+          publication.validUntil = now;
+          publication.snapshot = {
+            ...publication.snapshot,
+            title: 'Archived proof',
+            summary: null,
+          };
+        }
+        await publications.save(ownedPublications);
+        await manager.getRepository(ProofReview).update(
+          { missionId: In(missionIds) },
+          { note: null },
+        );
+        await missions.update(
+          { ownerUserId: userId },
+          {
+            state: ProofMissionState.Archived,
+            currentVerificationRunId: null,
+            currentReviewId: null,
+            title: 'Archived proof mission',
+            summary: null,
+            installationId: null,
+            githubRepositoryId: null,
+            pullNumber: null,
+            repositoryName: null,
+            repositoryPrivate: null,
+            pullTitle: null,
+            pullUrl: null,
+          },
+        );
+      }
+
+      await manager.getRepository(GithubInstallationClaimAttempt).delete({ userId });
+      const installations = manager.getRepository(GithubInstallation);
+      const ownedInstallations = await installations.find({
+        where: { ownerUserId: userId },
+        select: { id: true, githubInstallationId: true },
+      });
+      const installationIds = ownedInstallations.map(({ id }) => id);
+      const githubInstallationIds = ownedInstallations.map(
+        ({ githubInstallationId }) => githubInstallationId,
+      );
+      if (installationIds.length > 0) {
+        const deliveries = manager.getRepository(GithubWebhookDelivery);
+        const redactedDelivery = {
+          installationId: null,
+          githubInstallationId: null,
+          githubRepositoryId: null,
+          pullNumber: null,
+          headSha: null,
+          errorCode: null,
+        };
+        await deliveries.update(
+          { installationId: In(installationIds) },
+          redactedDelivery,
+        );
+        await deliveries.update(
+          { githubInstallationId: In(githubInstallationIds) },
+          redactedDelivery,
+        );
+        await manager.getRepository(GithubInstallationRepository).delete({
+          installationId: In(installationIds),
+        });
+        await installations.delete({ ownerUserId: userId });
+      }
+      await manager.getRepository(ProofReview).update(
+        { reviewerId: userId },
+        { note: null },
+      );
+      await manager.getRepository(ProofProfile).update(
+        { ownerUserId: userId },
+        {
+          state: ProofProfileState.Disabled,
+          displayName: '탈퇴한 사용자',
+          summary: null,
+        },
       );
     });
   }
