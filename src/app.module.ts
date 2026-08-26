@@ -10,6 +10,8 @@ import { RoadmapsModule } from './roadmaps/roadmaps.module';
 import { SocialModule } from './social/social.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { CareerModule } from './career/career.module';
+import { GithubModule } from './github/github.module';
 
 @Module({
   imports: [
@@ -39,6 +41,8 @@ import { UploadsModule } from './uploads/uploads.module';
     SocialModule,
     RealtimeModule,
     UploadsModule,
+    GithubModule,
+    CareerModule,
   ],
 })
 export class AppModule {}
