@@ -104,9 +104,9 @@ export class CareerService {
     return this.targets.find({ where: { userId }, order: { updatedAt: 'DESC' } });
   }
 
-  async createEvidence(userId: string, dto: CreateCareerEvidenceDto): Promise<CareerEvidence> {
+  async createEvidence(userId: string, dto: CreateCareerEvidenceDto) {
     const competencySlugs = this.validateCompetencySlugs(dto.competencySlugs);
-    return this.evidence.save(
+    const evidence = await this.evidence.save(
       this.evidence.create({
         userId,
         title: dto.title.trim(),
@@ -120,10 +120,15 @@ export class CareerService {
         reviewedAt: null,
       }),
     );
+    return this.projectCareerEvidenceForOwner(evidence);
   }
 
-  listEvidence(userId: string): Promise<CareerEvidence[]> {
-    return this.evidence.find({ where: { userId }, order: { createdAt: 'DESC' } });
+  async listEvidence(userId: string) {
+    const evidence = await this.evidence.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+    return evidence.map((item) => this.projectCareerEvidenceForOwner(item));
   }
 
   async getDiff(userId: string, targetId: string) {
@@ -1202,6 +1207,22 @@ export class CareerService {
   }
 
   private projectCareerEvidenceForReviewer(evidence: CareerEvidence) {
+    return {
+      id: evidence.id,
+      title: evidence.title,
+      url: evidence.url,
+      kind: evidence.kind,
+      description: evidence.description,
+      competencySlugs: evidence.competencySlugs,
+      status: evidence.status,
+      reviewNote: evidence.reviewNote,
+      reviewedAt: evidence.reviewedAt,
+      createdAt: evidence.createdAt,
+      updatedAt: evidence.updatedAt,
+    };
+  }
+
+  private projectCareerEvidenceForOwner(evidence: CareerEvidence) {
     return {
       id: evidence.id,
       title: evidence.title,

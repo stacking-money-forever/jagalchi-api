@@ -409,6 +409,91 @@ describe('CareerService evidence-execution boundaries', () => {
     )).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('serializes owner evidence lists without owner or reviewer identifiers', async () => {
+    const subject = createSubject();
+    const ownerId = '00000000-0000-4000-8000-000000000001';
+    const reviewerId = '00000000-0000-4000-8000-000000000002';
+    subject.evidence.find.mockResolvedValue([{
+      id: 'evidence-a',
+      userId: ownerId,
+      title: 'Evidence title',
+      url: 'https://example.test/evidence',
+      kind: CareerEvidenceKind.Article,
+      description: 'Evidence description',
+      competencySlugs: ['typescript'],
+      status: CareerEvidenceStatus.Verified,
+      reviewerId,
+      reviewNote: 'Verified evidence',
+      reviewedAt: now,
+      createdAt: new Date('2026-08-24T00:00:00.000Z'),
+      updatedAt: now,
+    }]);
+
+    const result = await subject.service.listEvidence(ownerId);
+    const serialized = JSON.stringify(result);
+
+    expect(subject.evidence.find).toHaveBeenCalledWith({
+      where: { userId: ownerId },
+      order: { createdAt: 'DESC' },
+    });
+    for (const forbidden of ['userId', 'reviewerId', ownerId, reviewerId]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+    expect(result[0]).toEqual(expect.objectContaining({
+      status: CareerEvidenceStatus.Verified,
+      reviewNote: 'Verified evidence',
+      reviewedAt: now,
+    }));
+  });
+
+  it('serializes created owner evidence without owner or reviewer identifiers', async () => {
+    const subject = createSubject();
+    const ownerId = '00000000-0000-4000-8000-000000000001';
+    const createdAt = new Date('2026-08-24T00:00:00.000Z');
+    subject.evidence.save.mockResolvedValue({
+      id: 'evidence-a',
+      userId: ownerId,
+      title: 'Evidence title',
+      url: 'https://example.test/evidence',
+      kind: CareerEvidenceKind.Article,
+      description: 'Evidence description',
+      competencySlugs: ['typescript'],
+      status: CareerEvidenceStatus.Submitted,
+      reviewerId: null,
+      reviewNote: null,
+      reviewedAt: null,
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    const result = await subject.service.createEvidence(ownerId, {
+      title: ' Evidence title ',
+      url: ' https://example.test/evidence ',
+      kind: CareerEvidenceKind.Article,
+      description: ' Evidence description ',
+      competencySlugs: ['typescript'],
+    });
+    const serialized = JSON.stringify(result);
+
+    expect(subject.evidence.save).toHaveBeenCalledWith(expect.objectContaining({
+      userId: ownerId,
+      reviewerId: null,
+    }));
+    for (const forbidden of ['userId', 'reviewerId', ownerId]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+    expect(result).toEqual(expect.objectContaining({
+      title: 'Evidence title',
+      url: 'https://example.test/evidence',
+      description: 'Evidence description',
+      status: CareerEvidenceStatus.Submitted,
+      reviewNote: null,
+      reviewedAt: null,
+      createdAt,
+      updatedAt: createdAt,
+    }));
+  });
+
   it('projects legacy reviewer evidence without owner or reviewer identifiers', async () => {
     const subject = createSubject();
     const submitted = {
