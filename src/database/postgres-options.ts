@@ -8,8 +8,15 @@ const integer = (value: unknown, fallback: number): number => {
   return fallback;
 };
 
-export const postgresSsl = (enabled: boolean): false | { rejectUnauthorized: true } =>
-  enabled ? { rejectUnauthorized: true } : false;
+type PostgresSslOptions = false | { rejectUnauthorized: true; ca?: string };
+
+const normalizeCertificate = (certificate: string): string => certificate.replace(/\\n/g, '\n').trim();
+
+export const postgresSsl = (enabled: boolean, certificate?: string): PostgresSslOptions => {
+  if (!enabled) return false;
+  if (!certificate) return { rejectUnauthorized: true };
+  return { rejectUnauthorized: true, ca: normalizeCertificate(certificate) };
+};
 
 export const postgresExtra = (
   environment: EnvironmentReader,

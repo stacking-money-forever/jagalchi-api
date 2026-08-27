@@ -104,6 +104,16 @@ export const validateEnvironment = (environment: Environment): Environment => {
   }
   if (production) {
     if (!requiredBoolean(environment, 'DATABASE_SSL')) throw new Error('DATABASE_SSL must be true in production');
+    if (environment.DATABASE_SSL_CA !== undefined) {
+      const certificate = environment.DATABASE_SSL_CA.replace(/\\n/g, '\n').trim();
+      if (
+        certificate.length > 16_384 ||
+        !certificate.startsWith('-----BEGIN CERTIFICATE-----\n') ||
+        !certificate.endsWith('\n-----END CERTIFICATE-----')
+      ) {
+        throw new Error('DATABASE_SSL_CA must be a PEM certificate');
+      }
+    }
     if (requiredBoolean(environment, 'DATABASE_SYNCHRONIZE')) {
       throw new Error('DATABASE_SYNCHRONIZE must be false in production');
     }

@@ -40,6 +40,25 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment(environment)).toThrow(`${key} is required`);
   });
 
+  it('accepts an escaped PEM database certificate authority', () => {
+    const environment = {
+      ...productionEnvironment(),
+      DATABASE_SSL_CA:
+        '-----BEGIN CERTIFICATE-----\\ntest-certificate-body\\n-----END CERTIFICATE-----',
+    };
+    expect(validateEnvironment(environment)).toBe(environment);
+  });
+
+  it.each([
+    'not-a-certificate',
+    '-----BEGIN CERTIFICATE-----\\nmissing-end',
+    `-----BEGIN CERTIFICATE-----\n${'a'.repeat(16_384)}\n-----END CERTIFICATE-----`,
+  ])('rejects invalid database certificate authority', (certificate) => {
+    expect(() =>
+      validateEnvironment({ ...productionEnvironment(), DATABASE_SSL_CA: certificate }),
+    ).toThrow('DATABASE_SSL_CA must be a PEM certificate');
+  });
+
   it('requires AI credentials only when AI is enabled', () => {
     const environment = { ...productionEnvironment(), AI_FEATURES_ENABLED: 'true' };
     expect(() => validateEnvironment(environment)).toThrow('AI_SERVICE_URL is required');

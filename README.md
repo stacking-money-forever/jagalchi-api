@@ -28,7 +28,7 @@ Only these providers are approved for this run:
 - Cloudtype **Free**, exactly one NestJS service.
 - Supabase **Free**, exactly one dedicated PostgreSQL project/database.
 
-Stop before provisioning or deployment when either provider requires a new card, payment, automatic overage, paid resource, expanded terms, or an alternate provider. Do not upgrade automatically. Supabase must expose a direct TLS PostgreSQL connection usable by migrations and runtime within its Free connection/storage limits. Certificate and hostname verification must remain enabled.
+Stop before provisioning or deployment when either provider requires a new card, payment, automatic overage, paid resource, expanded terms, or an alternate provider. Do not upgrade automatically. Supabase must expose a TLS PostgreSQL connection usable by migrations and runtime within its Free connection/storage limits. Use the direct connection when the runtime supports IPv6; use the Free Session Pooler only when the runtime is IPv4-only. Certificate and hostname verification must remain enabled.
 
 Cloudtype Free is temporary alpha infrastructure: one replica, Recreate updates, daily stop, cold starts, temporary local disk, preview hostname, and current Free traffic/build/image/runtime ceilings. Recheck the signed-in dashboard immediately before deployment and record stricter current limits.
 
@@ -36,7 +36,7 @@ Cloudtype Free is temporary alpha infrastructure: one replica, Recreate updates,
 
 | Setting | Required value |
 |---|---|
-| Repository | private `gajaedev/jagalchi-platform` |
+| Repository | public `gajaedev/jagalchi-platform` |
 | Build context | repository root |
 | Dockerfile | `services/api/Dockerfile` |
 | Branch/SHA | exact reviewed and pushed SHA |
@@ -57,8 +57,9 @@ Set secret values only in Cloudtype/Supabase secret controls. Never commit or co
 ```text
 NODE_ENV=production
 PORT=8080
-DATABASE_URL=<Supabase direct TLS PostgreSQL URL>
+DATABASE_URL=<Supabase direct or Free Session Pooler PostgreSQL URL>
 DATABASE_SSL=true
+DATABASE_SSL_CA=<Supabase root CA PEM; literal \n escapes are accepted>
 DATABASE_SYNCHRONIZE=false
 DATABASE_POOL_MAX=5
 DATABASE_CONNECTION_TIMEOUT_MS=5000

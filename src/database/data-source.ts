@@ -108,6 +108,6 @@ export const AppDataSource = new DataSource({
     CreateEvidenceExecution1770000008000,
   ],
   migrationsTableName: 'jagalchi_migrations',
-  ssl: postgresSsl(process.env.DATABASE_SSL === 'true'),
+  ssl: postgresSsl(process.env.DATABASE_SSL === 'true', process.env.DATABASE_SSL_CA),
   extra: postgresExtra({ get: (key: string) => process.env[key] }, true),
 });

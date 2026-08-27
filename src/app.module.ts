@@ -32,7 +32,10 @@ import { UploadsModule } from './uploads/uploads.module';
         url: config.getOrThrow<string>('DATABASE_URL'),
         autoLoadEntities: true,
         synchronize: config.get<string>('DATABASE_SYNCHRONIZE') === 'true',
-        ssl: postgresSsl(config.get<string>('DATABASE_SSL') === 'true'),
+        ssl: postgresSsl(
+          config.get<string>('DATABASE_SSL') === 'true',
+          config.get<string>('DATABASE_SSL_CA'),
+        ),
         extra: postgresExtra(config, false),
       }),
     }),
