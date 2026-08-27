@@ -2,6 +2,8 @@
 
 This package is the canonical NestJS backend for Jagalchi. The temporary zero-cost alpha deployment runs one API container on Cloudtype Free and stores durable state only in Supabase Free PostgreSQL. Django AI, uploads, GitHub Evidence Execution, and public Proof are disabled.
 
+The remaining user-admission, GitHub App, E2E, export/restore, and rollback gates are tracked in [`CLOSED_ALPHA_REMAINING.md`](./CLOSED_ALPHA_REMAINING.md).
+
 ## Local verification
 
 From the monorepo root:
@@ -154,19 +156,19 @@ Record identifiers and results only. Never record secret values, full database U
 
 | Field | Value |
 |---|---|
-| Evidence date/time | pending |
-| Reviewed source SHA | pending |
-| Cloudtype deployment/image IDs | pending |
-| Cloudtype plan/limit review and ₩0 confirmation | pending |
-| Supabase plan/limit review and ₩0 confirmation | pending |
-| Secret names installed | pending |
-| Public API origin / web origin | pending / `https://jagalchi.justn.me` |
-| Migration versions/result | pending |
-| Baseline/final proxy trust values and sanitized hop shape | pending |
-| Healthz/Recreate/single-runner proof | pending |
-| Build cost `B`, image size, reserve | pending |
-| CORS/auth/disabled/rate/body/pool smoke | pending |
-| Stop/resume persistence | pending |
+| Evidence date | 2026-08-27 KST |
+| Reviewed source SHA | `7ec4a8af0a59fe1e55f17c6c4df96634d9f65161` |
+| Cloudtype service | `@justn-hyeok/beatyavibe:main/jagalchi-api` / `mtb19ap69e746959` |
+| Cloudtype plan/limit review and ₩0 confirmation | Free, one 512 MB replica, 1/4 services, no new payment accepted |
+| Supabase plan/limit review and ₩0 confirmation | Free, Seoul Nano, no paid IPv4 add-on accepted |
+| Secret names installed | DB URL/CA, JWT, verification, rate-limit; values excluded |
+| Public API origin / web origin | Cloudtype preview origin / `https://jagalchi.justn.me` |
+| Migration versions/result | 9 migrations; migration command completed before successful Nest startup |
+| Baseline/final proxy trust values | `0` insufficient behind ingress; `1` passed changing-XFF threshold proof |
+| Healthz/Recreate/single-runner proof | `/api/health/ready`, Recreate, one running replica |
+| Build/image | observed image `79,529,017` bytes; cached rebuild 8–9 seconds |
+| CORS/auth/disabled/rate/body/pool smoke | CORS and 413 passed; rate request 61 returned 429; auth/disabled production smoke pending accounts |
+| Stop/resume persistence | local proof complete; production daily-stop proof pending |
 | Export/restore drill | pending |
 | Previous-SHA rollback | pending |
-| Remaining blockers | pending |
+| Remaining blockers | [`CLOSED_ALPHA_REMAINING.md`](./CLOSED_ALPHA_REMAINING.md) |
