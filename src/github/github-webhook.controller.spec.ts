@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
+import { THROTTLER_SKIP } from '@nestjs/throttler/dist/throttler.constants';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProofMission,
@@ -33,6 +34,13 @@ const payload = {
 
 function raw(value: unknown) {
   return Buffer.from(JSON.stringify(value));
+}
+
+function rawAtSize(size: number): Buffer {
+  const value = { ...payload, padding: '' };
+  const overhead = Buffer.byteLength(JSON.stringify(value));
+  value.padding = 'x'.repeat(size - overhead);
+  return raw(value);
 }
 
 function signature(body: Buffer) {
@@ -122,9 +130,14 @@ describe('GithubWebhookController signed delivery boundary', () => {
 
   it('verifies the signature over exact raw bytes before parsing or touching persistence', async () => {
     const subject = createSubject();
-    const body = raw(payload);
+    const body = Buffer.from(
+      `{\n  "action":"synchronize",\n  "installation":{"id":501},\n  "repository":{"id":101},\n  "pull_request":{"number":7,"head":{"sha":"${sha}"}}\n}`,
+    );
     await expect(receive(subject, body, { signature: `sha256=${'0'.repeat(64)}` }))
       .rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(receive(subject, Buffer.from(body.toString().replace('\n  "action"', ' "action"')), {
+      signature: signature(body),
+    })).rejects.toBeInstanceOf(UnauthorizedException);
     await expect(subject.controller.receive(
       { rawBody: body } as never,
       'application/json',
@@ -147,6 +160,24 @@ describe('GithubWebhookController signed delivery boundary', () => {
     const oversized = Buffer.alloc(256 * 1024 + 1, 0x20);
     await expect(receive(subject, oversized)).rejects.toBeInstanceOf(PayloadTooLargeException);
     expect(subject.dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('accepts an exactly 256 KiB signed JSON body and rejects 256 KiB plus one byte', async () => {
+    const subject = createSubject();
+    const atLimit = rawAtSize(256 * 1024);
+    expect(atLimit).toHaveLength(256 * 1024);
+    await expect(receive(subject, atLimit)).resolves.toBeUndefined();
+
+    const overLimit = rawAtSize(256 * 1024 + 1);
+    expect(overLimit).toHaveLength(256 * 1024 + 1);
+    await expect(receive(createSubject(), overLimit)).rejects.toBeInstanceOf(PayloadTooLargeException);
+  });
+
+  it('skips every configured generic throttler only for signed webhook deliveries', () => {
+    const handler = GithubWebhookController.prototype.receive;
+    for (const name of ['default', 'ip']) {
+      expect(Reflect.getMetadata(`${THROTTLER_SKIP}${name}`, handler)).toBe(true);
+    }
   });
 
   it('persists a signed delivery idempotently and acknowledges replay without repeating invalidation', async () => {

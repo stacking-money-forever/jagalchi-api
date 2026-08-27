@@ -12,6 +12,7 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "migration:run": "tsx src/database/run-migrations.ts",
+    "user-role:manage": "tsx src/auth/manage-user-role.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -33,6 +34,7 @@
     "@nestjs/websockets": "^11.1.8",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
+    "express": "^5.2.1",
     "google-auth-library": "11.0.2",
     "helmet": "^8.1.0",
     "passport": "^0.7.0",
@@ -47,6 +49,7 @@
     "@electric-sql/pglite": "^0.5.7",
     "@nestjs/cli": "^11.0.10",
     "@nestjs/testing": "^11.1.0",
+    "@types/express": "^5.0.6",
     "@types/node": "^24.0.0",
     "@types/passport-jwt": "^4.0.1",
     "@typescript-eslint/eslint-plugin": "^8.50.0",

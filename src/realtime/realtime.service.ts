@@ -108,10 +108,10 @@ export class RealtimeService {
       order: { sequence: 'ASC' },
       take: boundedLimit,
     });
-    const last = events.at(-1);
+    const sequence = await this.sequences.findOne({ where: { roadmapId } });
     return {
       events,
-      currentSequence: last ? Number(last.sequence) : afterSequence,
+      currentSequence: sequence ? Number(sequence.currentSequence) : 0,
     };
   }
 

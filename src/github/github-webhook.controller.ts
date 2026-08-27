@@ -10,6 +10,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle } from '@nestjs/throttler';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import {
@@ -29,6 +30,10 @@ import {
 import { GithubService } from './github.service';
 
 const MAX_WEBHOOK_BYTES = 256 * 1024;
+const WEBHOOK_THROTTLER_SKIPS = {
+  default: true,
+  ip: true,
+} as const;
 const DELIVERY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DECIMAL_ID = /^[1-9]\d*$/;
 const SHA = /^[0-9a-f]{40}$/i;
@@ -66,6 +71,7 @@ export class GithubWebhookController {
 
   @Post()
   @HttpCode(204)
+  @SkipThrottle(WEBHOOK_THROTTLER_SKIPS)
   async receive(
     @Req() request: GithubWebhookRequest,
     @Headers('content-type') contentType: string | undefined,

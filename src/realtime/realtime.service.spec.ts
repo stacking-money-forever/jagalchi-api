@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { RoadmapVisibility, type Roadmap } from '../roadmaps/entities/roadmap.entities';
+import type { RoadmapEvent } from './roadmap-event.entity';
 import { RealtimeService } from './realtime.service';
 import type { RoadmapOperation } from './realtime.types';
 
@@ -76,5 +77,81 @@ describe('RealtimeService graph projection', () => {
     apply(target, { type: 'NODE_DELETE', targetId: 'node-1' });
     expect(target.graph.nodes.map((node) => node.id)).toEqual(['node-2']);
     expect(target.graph.edges).toEqual([]);
+  });
+});
+
+describe('RealtimeService readSince', () => {
+  const roadmapId = '11111111-1111-4111-8111-111111111111';
+  const actorId = '22222222-2222-4222-8222-222222222222';
+
+  const event = (sequence: number): RoadmapEvent =>
+    ({
+      id: `event-${sequence}`,
+      roadmapId,
+      actorId,
+      sequence: String(sequence),
+      baseSequence: String(sequence - 1),
+      idempotencyKey: `key-${sequence}`,
+      operation: { type: 'NODE_UPDATE', targetId: `node-${sequence}` },
+      createdAt: new Date(),
+    }) as RoadmapEvent;
+
+  const subject = (events: RoadmapEvent[], currentSequence: number) => {
+    const eventRepository = { find: vi.fn().mockResolvedValue(events) };
+    const sequenceRepository = {
+      findOne: vi.fn().mockResolvedValue({
+        roadmapId,
+        currentSequence: String(currentSequence),
+      }),
+    };
+    const roadmaps = { getOwned: vi.fn().mockResolvedValue({}) };
+    return {
+      service: new RealtimeService(
+        {} as never,
+        roadmaps as never,
+        eventRepository as never,
+        sequenceRepository as never,
+      ),
+      eventRepository,
+      sequenceRepository,
+    };
+  };
+
+  it('returns the stored cursor for an empty backlog', async () => {
+    const { service } = subject([], 12);
+
+    await expect(service.readSince(actorId, roadmapId, 12, 500)).resolves.toEqual({
+      events: [],
+      currentSequence: 12,
+    });
+  });
+
+  it('keeps an exactly-limit page ordered while reporting its authoritative cursor', async () => {
+    const page = [event(11), event(12)];
+    const { service, eventRepository } = subject(page, 12);
+
+    await expect(service.readSince(actorId, roadmapId, 10, 2)).resolves.toEqual({
+      events: page,
+      currentSequence: 12,
+    });
+    expect(eventRepository.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: { sequence: 'ASC' },
+        take: 2,
+      }),
+    );
+  });
+
+  it('reports a later authoritative cursor when more events remain after the page', async () => {
+    const page = [event(11), event(12)];
+    const { service, sequenceRepository } = subject(page, 13);
+
+    await expect(service.readSince(actorId, roadmapId, 10, 2)).resolves.toEqual({
+      events: page,
+      currentSequence: 13,
+    });
+    expect(sequenceRepository.findOne).toHaveBeenCalledWith({
+      where: { roadmapId },
+    });
   });
 });

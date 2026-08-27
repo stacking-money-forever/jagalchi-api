@@ -59,4 +59,11 @@ describe('createRateLimitOptions', () => {
     expect(requestThrottle?.skipIf?.(contextFor({}, 'request'))).toBe(false);
     expect(requestThrottle?.skipIf?.(contextFor({}, 'entry'))).toBe(true);
   });
+
+  it('keeps the generic public IP throttle active independently of route-specific policies', () => {
+    const { options } = create();
+    const ipThrottle = options.throttlers.find((item) => item.name === 'ip');
+    expect(ipThrottle?.limit).toBe(60);
+    expect(ipThrottle?.skipIf).toBeUndefined();
+  });
 });
