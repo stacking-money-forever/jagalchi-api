@@ -25,36 +25,26 @@
 
 ### 1. 계정 및 이메일 전달 방식 확정
 
-현재 회원가입 검증 메일을 보낼 `EMAIL_DELIVERY_URL`과 `EMAIL_DELIVERY_TOKEN`이 없다. 아래 두 방식 중 하나를 확정해야 한다.
+Closed Alpha는 **일반 이메일 회원가입**으로 확정한다. 이메일 인증을 우회하거나 공개 admin API를 만들지 않는다.
 
-#### 방식 A — Free 이메일 전달 어댑터
+#### Resend Free 전달 경로
 
-- 무료 플랜에서 카드·자동 초과 과금이 없는 이메일 공급자 선택
-- 기존 API 계약을 받는 전달 어댑터 구성:
-  - 요청: Bearer 인증 `POST`
-  - body: `{ to, template, variables: { code } }`
-- 발신 도메인 DNS 검증
-- Cloudtype에 `EMAIL_DELIVERY_URL`, `EMAIL_DELIVERY_TOKEN` 설치
-- 정상 전달, 공급자 오류, timeout, 재시도 없는 fail-closed 동작 검증
-
-#### 방식 B — 수동 alpha 계정 프로비저닝
-
-- 공개 admin API를 만들지 않는다.
-- 비밀번호와 역할을 안전하게 생성하는 운영 CLI를 추가하거나 검증한다.
-- 비밀번호를 명령행 인자, shell history, 로그, Issue, 채팅에 남기지 않는다.
-- owner와 reviewer가 첫 로그인 후 비밀번호를 교체할 수 있는 절차를 제공한다.
-
-#### 필요한 사용자 입력
-
-- owner 이메일 1개
-- reviewer 이메일 1개
-- 최대 5계정의 나머지 초대 이메일
-- 방식 A 또는 B 선택
+- 공급자: Resend Free (`$0`, 월 3,000통, 일 100통, Free overage 없음)
+- 발신 도메인: `mail.jagalchi.justn.me`
+- 발신자: `Jagalchi <no-reply@mail.jagalchi.justn.me>`
+- Cloudflare Domain Connect로 DKIM, SPF MX/TXT 레코드를 추가한다.
+- API는 `https://api.resend.com/emails`에 send-only API key로 직접 전송한다.
+- 회원가입과 비밀번호 재설정 인증번호는 10분 만료이며 provider 오류와 10초 timeout에서 challenge를 삭제하고 fail-closed 한다.
+- Cloudtype에는 `RESEND_API_KEY`, `EMAIL_FROM`을 secret control로 설치한다.
 
 완료 기준:
 
-- owner와 reviewer가 서로 다른 계정으로 로그인한다.
-- reviewer는 아래 운영 CLI 또는 동등하게 감사 가능한 절차로 승격된다.
+- `mail.jagalchi.justn.me`의 DKIM/SPF가 Resend에서 verified다.
+- 실제 수신함에서 회원가입 인증번호를 받고 가입할 수 있다.
+- 실제 수신함에서 비밀번호 재설정 인증번호를 받고 비밀번호를 교체할 수 있다.
+- provider 4xx/5xx와 timeout이 `503`을 반환하고 사용 불가능한 challenge를 남기지 않는다.
+- owner와 reviewer가 서로 다른 이메일로 직접 가입한다.
+- reviewer는 아래의 감사 가능한 운영 CLI로 승격한다.
 
 ```bash
 pnpm --filter @jagalchi/api user-role:manage -- \

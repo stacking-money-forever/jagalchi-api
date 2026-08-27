@@ -13,6 +13,8 @@ const productionEnvironment = (): Record<string, string> => ({
   JWT_ACCESS_SECRET: 'a'.repeat(32),
   VERIFICATION_CODE_SECRET: 'b'.repeat(32),
   RATE_LIMIT_HASH_SECRET: 'c'.repeat(32),
+  RESEND_API_KEY: `re_${'d'.repeat(24)}`,
+  EMAIL_FROM: 'Jagalchi <no-reply@mail.jagalchi.justn.me>',
   CORS_ORIGINS: 'https://jagalchi.justn.me',
   PUBLIC_API_URL: 'https://jagalchi-api.example.com',
   WEB_APP_URL: 'https://jagalchi.justn.me',
@@ -24,7 +26,7 @@ const productionEnvironment = (): Record<string, string> => ({
 });
 
 describe('validateEnvironment', () => {
-  it('accepts the zero-cost production contract without provider credentials', () => {
+  it('accepts the zero-cost production contract with Resend delivery', () => {
     const environment = productionEnvironment();
     expect(validateEnvironment(environment)).toBe(environment);
   });
@@ -57,6 +59,23 @@ describe('validateEnvironment', () => {
     expect(() =>
       validateEnvironment({ ...productionEnvironment(), DATABASE_SSL_CA: certificate }),
     ).toThrow('DATABASE_SSL_CA must be a PEM certificate');
+  });
+
+  it.each([
+    ['RESEND_API_KEY', 'not-a-key', 'RESEND_API_KEY must be a Resend API key'],
+    ['EMAIL_FROM', 'bad\nheader@example.com', 'EMAIL_FROM must be an email address'],
+    ['EMAIL_FROM', 'Missing bracket <sender@example.com', 'EMAIL_FROM must be an email address'],
+  ])('rejects invalid email configuration %s', (key, value, message) => {
+    expect(() => validateEnvironment({ ...productionEnvironment(), [key]: value })).toThrow(message);
+  });
+
+  it('requires Resend credentials in production', () => {
+    const withoutKey = productionEnvironment();
+    delete withoutKey.RESEND_API_KEY;
+    expect(() => validateEnvironment(withoutKey)).toThrow('RESEND_API_KEY is required');
+    const withoutSender = productionEnvironment();
+    delete withoutSender.EMAIL_FROM;
+    expect(() => validateEnvironment(withoutSender)).toThrow('EMAIL_FROM is required');
   });
 
   it('requires AI credentials only when AI is enabled', () => {

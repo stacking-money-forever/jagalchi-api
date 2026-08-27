@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CareerEvidence,
@@ -68,10 +68,11 @@ describe('AuthService', () => {
       PUBLIC_API_URL: 'https://api.jagalchi.dev',
       OAUTH_GOOGLE_CLIENT_ID: 'google-client',
       VERIFICATION_CODE_SECRET: 'verification-code-secret-with-32-characters',
-      EMAIL_DELIVERY_URL: 'https://email.internal/send',
-      EMAIL_DELIVERY_TOKEN: 'delivery-token',
+      RESEND_API_KEY: 're_test_delivery_key',
+      EMAIL_FROM: 'Jagalchi <no-reply@mail.jagalchi.justn.me>',
     };
     const config = {
+      get: vi.fn((key: string) => configValues[key]),
       getOrThrow: vi.fn((key: string) => {
         const value = configValues[key];
         if (!value) throw new Error(`Missing ${key}`);
@@ -98,7 +99,7 @@ describe('AuthService', () => {
       {} as never,
       verificationChallenges as never,
     );
-    return { attempts, service, sessions, tickets, users, verificationChallenges };
+    return { attempts, configValues, service, sessions, tickets, users, verificationChallenges };
   };
 
   it('hashes a new password and opens the approved signup ticket account', async () => {
@@ -164,23 +165,86 @@ describe('AuthService', () => {
     );
 
     await subject.service.sendEmailVerification({ email: 'USER@example.com' });
-    const request = vi.mocked(fetch).mock.calls[0]?.[1];
+    const [url, request] = vi.mocked(fetch).mock.calls[0] ?? [];
     const delivery = JSON.parse(String(request?.body)) as {
-      to: string;
-      variables: { code: string };
+      from: string;
+      to: string[];
+      subject: string;
+      text: string;
+      html: string;
     };
-    expect(delivery.to).toBe('user@example.com');
-    expect(delivery.variables.code).toMatch(/^[0-9]{6}$/);
+    const code = delivery.text.match(/\b(\d{6})\b/)?.[1];
+    expect(url).toBe('https://api.resend.com/emails');
+    expect(request?.headers).toEqual(expect.objectContaining({
+      authorization: 'Bearer re_test_delivery_key',
+      'content-type': 'application/json',
+      'idempotency-key': 'email-challenge-challenge-1',
+    }));
+    expect(delivery).toEqual(expect.objectContaining({
+      from: 'Jagalchi <no-reply@mail.jagalchi.justn.me>',
+      to: ['user@example.com'],
+      subject: '[자갈치] 이메일 인증번호',
+    }));
+    expect(code).toMatch(/^[0-9]{6}$/);
+    expect(delivery.html).toContain(code);
 
     await expect(
       subject.service.verifyEmail({
         email: 'user@example.com',
-        code: delivery.variables.code,
+        code: code!,
       }),
     ).resolves.toEqual({ registrationProof: 'access-token' });
     expect(subject.verificationChallenges.save).toHaveBeenLastCalledWith(
       expect.objectContaining({ consumedAt: expect.any(Date) }),
     );
+  });
+
+  it('fails closed without making a request when development email delivery is unconfigured', async () => {
+    const subject = createSubject();
+    delete subject.configValues.RESEND_API_KEY;
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      subject.service.sendEmailVerification({ email: 'user@example.com' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(subject.verificationChallenges.delete).toHaveBeenCalledWith({ id: 'challenge-1' });
+  });
+
+  it('fails closed and removes the challenge when Resend rejects delivery', async () => {
+    const subject = createSubject();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 429 })));
+
+    await expect(
+      subject.service.sendEmailVerification({ email: 'user@example.com' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(subject.verificationChallenges.delete).toHaveBeenCalledWith({ id: 'challenge-1' });
+  });
+
+  it('does not retry and removes the challenge when Resend times out', async () => {
+    const subject = createSubject();
+    const fetchMock = vi.fn().mockRejectedValue(new DOMException('Timed out', 'TimeoutError'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      subject.service.sendEmailVerification({ email: 'user@example.com' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(subject.verificationChallenges.delete).toHaveBeenCalledWith({ id: 'challenge-1' });
+  });
+
+  it('sends a distinct password-reset message only for registered users', async () => {
+    const subject = createSubject();
+    subject.users.exists.mockResolvedValue(true);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 200 })));
+
+    await subject.service.sendPasswordReset({ email: 'user@example.com' });
+
+    const request = vi.mocked(fetch).mock.calls[0]?.[1];
+    const delivery = JSON.parse(String(request?.body)) as { subject: string; text: string };
+    expect(delivery.subject).toBe('[자갈치] 비밀번호 재설정 인증번호');
+    expect(delivery.text).toMatch(/비밀번호 재설정 인증번호는 \d{6}입니다/);
   });
 
   it('redacts all authored Career data and disables the public profile on account deletion', async () => {

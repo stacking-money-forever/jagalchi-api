@@ -19,13 +19,11 @@ import {
   createPublicKey,
   randomBytes,
   randomInt,
-  scrypt as scryptCallback,
   sign as cryptoSign,
   timingSafeEqual,
   verify as cryptoVerify,
   type JsonWebKey,
 } from 'node:crypto';
-import { promisify } from 'node:util';
 import { DataSource, ILike, In, IsNull, MoreThan, Repository } from 'typeorm';
 import { TicketsService } from '../tickets/tickets.service';
 import { Follow } from '../social/entities/social.entities';
@@ -57,6 +55,7 @@ import {
   VerifyEmailDto,
   UpdateProfileDto,
 } from './auth.dto';
+import { hashPassword, verifyPassword } from './password';
 import {
   OAuthAttempt,
   OAuthIdentity,
@@ -69,11 +68,28 @@ import {
   EmailChallengePurpose,
 } from './auth.entities';
 
-const scrypt = promisify(scryptCallback);
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_DAYS = 30;
 const OAUTH_ATTEMPT_MINUTES = 10;
 const OAUTH_GRANT_MINUTES = 2;
+const RESEND_EMAIL_API_URL = 'https://api.resend.com/emails';
+
+type VerificationEmailTemplate =
+  | 'jagalchi-registration-code'
+  | 'jagalchi-password-reset-code';
+
+function verificationEmailContent(template: VerificationEmailTemplate, code: string) {
+  const registration = template === 'jagalchi-registration-code';
+  const subject = registration
+    ? '[자갈치] 이메일 인증번호'
+    : '[자갈치] 비밀번호 재설정 인증번호';
+  const purpose = registration ? '회원가입' : '비밀번호 재설정';
+  return {
+    subject,
+    text: `${purpose} 인증번호는 ${code}입니다. 인증번호는 10분 후 만료됩니다.`,
+    html: `<!doctype html><html lang="ko"><body><h1>${purpose} 인증번호</h1><p>아래 인증번호를 자갈치 화면에 입력해주세요.</p><p style="font-size:32px;font-weight:700;letter-spacing:0.2em">${code}</p><p>인증번호는 10분 후 만료됩니다. 본인이 요청하지 않았다면 이 메일을 무시해주세요.</p></body></html>`,
+  };
+}
 
 interface AuthResult {
   accessToken: string;
@@ -128,7 +144,7 @@ export class AuthService {
       this.users.create({
         email,
         name: dto.name.trim(),
-        passwordHash: await this.hashPassword(dto.password),
+        passwordHash: await hashPassword(dto.password),
         roles: ['USER'],
         status: UserStatus.Active,
       }),
@@ -207,7 +223,7 @@ export class AuthService {
       const users = manager.getRepository(User);
       const user = await users.findOne({ where: { email } });
       if (!user) throw new UnauthorizedException('Password reset proof is not valid');
-      user.passwordHash = await this.hashPassword(dto.newPassword);
+      user.passwordHash = await hashPassword(dto.newPassword);
       challenge.proofUsedAt = new Date();
       await users.save(user);
       await challenges.save(challenge);
@@ -221,7 +237,7 @@ export class AuthService {
   private async sendEmailChallenge(
     rawEmail: string,
     purpose: EmailChallengePurpose,
-    template: string,
+    template: VerificationEmailTemplate,
   ): Promise<void> {
     const email = this.normalizeEmail(rawEmail);
     const recent = await this.verificationChallenges.findOne({
@@ -247,22 +263,25 @@ export class AuthService {
       }),
     );
     try {
-      const deliveryUrl = new URL(
-        this.config.getOrThrow<string>('EMAIL_DELIVERY_URL'),
-      );
-      if (!['https:', 'http:'].includes(deliveryUrl.protocol)) {
-        throw new Error('Email delivery URL must use HTTP');
+      const resendApiKey = this.config.get<string>('RESEND_API_KEY')?.trim();
+      const emailFrom = this.config.get<string>('EMAIL_FROM')?.trim();
+      if (!resendApiKey || !emailFrom) {
+        throw new Error('Email delivery is not configured');
       }
-      const response = await fetch(deliveryUrl, {
+      const content = verificationEmailContent(template, code);
+      const response = await fetch(RESEND_EMAIL_API_URL, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${this.config.getOrThrow<string>('EMAIL_DELIVERY_TOKEN')}`,
+          authorization: `Bearer ${resendApiKey}`,
           'content-type': 'application/json',
+          'idempotency-key': `email-challenge-${challenge.id}`,
         },
         body: JSON.stringify({
-          to: email,
-          template,
-          variables: { code },
+          from: emailFrom,
+          to: [email],
+          subject: content.subject,
+          text: content.text,
+          html: content.html,
         }),
         signal: AbortSignal.timeout(10_000),
       });
@@ -314,7 +333,7 @@ export class AuthService {
       !user ||
       !user.passwordHash ||
       user.status !== UserStatus.Active ||
-      !(await this.verifyPassword(dto.password, user.passwordHash))
+      !(await verifyPassword(dto.password, user.passwordHash))
     ) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -1036,17 +1055,4 @@ export class AuthService {
       .digest('hex');
   }
 
-  private async hashPassword(password: string): Promise<string> {
-    const salt = randomBytes(16);
-    const derived = (await scrypt(password, salt, 64)) as Buffer;
-    return `scrypt$${salt.toString('base64url')}$${derived.toString('base64url')}`;
-  }
-
-  private async verifyPassword(password: string, encoded: string): Promise<boolean> {
-    const [algorithm, saltValue, hashValue] = encoded.split('$');
-    if (algorithm !== 'scrypt' || !saltValue || !hashValue) return false;
-    const expected = Buffer.from(hashValue, 'base64url');
-    const actual = (await scrypt(password, Buffer.from(saltValue, 'base64url'), 64)) as Buffer;
-    return actual.length === expected.length && timingSafeEqual(actual, expected);
-  }
 }

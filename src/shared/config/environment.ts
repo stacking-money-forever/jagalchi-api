@@ -98,6 +98,21 @@ export const validateEnvironment = (environment: Environment): Environment => {
     throw new Error('RATE_LIMIT_HASH_SECRET must contain at least 32 characters');
   }
 
+  if (production) {
+    const resendApiKey = required(environment, 'RESEND_API_KEY');
+    if (!/^re_[A-Za-z0-9_-]{16,}$/.test(resendApiKey)) {
+      throw new Error('RESEND_API_KEY must be a Resend API key');
+    }
+    const emailFrom = required(environment, 'EMAIL_FROM');
+    const namedAddress = /^[^<>\r\n]{1,60} <([^<>\s]+)>$/.exec(emailFrom);
+    if (
+      ((emailFrom.includes('<') || emailFrom.includes('>')) && !namedAddress) ||
+      !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(namedAddress?.[1] ?? emailFrom)
+    ) {
+      throw new Error('EMAIL_FROM must be an email address with an optional display name');
+    }
+  }
+
   const databaseUrl = new URL(required(environment, 'DATABASE_URL'));
   if (!['postgres:', 'postgresql:'].includes(databaseUrl.protocol)) {
     throw new Error('DATABASE_URL must use PostgreSQL');
