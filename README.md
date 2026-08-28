@@ -1,8 +1,8 @@
 # Jagalchi NestJS API
 
-This package is the canonical NestJS backend for Jagalchi. The temporary zero-cost alpha deployment runs one API container on Cloudtype Free and stores durable state only in Supabase Free PostgreSQL. Django AI, uploads, GitHub Evidence Execution, and public Proof are disabled.
+This package is the canonical NestJS backend for Jagalchi. The temporary zero-cost alpha deployment runs one API container on Cloudtype Free and stores durable state only in Supabase Free PostgreSQL. Django AI, uploads, and public Proof are disabled; the verified GitHub Evidence flow is enabled.
 
-The remaining user-admission, GitHub App, E2E, export/restore, and rollback gates are tracked in [`CLOSED_ALPHA_REMAINING.md`](./CLOSED_ALPHA_REMAINING.md).
+Completed release evidence, the failed Cloudtype availability gate, and the personal-server cutover plan are tracked in [`CLOSED_ALPHA_REMAINING.md`](./CLOSED_ALPHA_REMAINING.md).
 
 ## Local verification
 
@@ -32,7 +32,7 @@ Only these providers are approved for this run:
 
 Stop before provisioning or deployment when either provider requires a new card, payment, automatic overage, paid resource, expanded terms, or an alternate provider. Do not upgrade automatically. Supabase must expose a TLS PostgreSQL connection usable by migrations and runtime within its Free connection/storage limits. Use the direct connection when the runtime supports IPv6; use the Free Session Pooler only when the runtime is IPv4-only. Certificate and hostname verification must remain enabled.
 
-Cloudtype Free is temporary alpha infrastructure: one replica, Recreate updates, daily stop, cold starts, temporary local disk, preview hostname, and current Free traffic/build/image/runtime ceilings. Recheck the signed-in dashboard immediately before deployment and record stricter current limits.
+Cloudtype Free is temporary fallback infrastructure: one replica, Recreate updates, daily stop, cold starts, temporary local disk, preview hostname, and current Free traffic/build/image/runtime ceilings. The observed daily stop did not recover automatically within 15 minutes 20 seconds, so this provider fails the unattended availability gate. Recheck the signed-in dashboard immediately before deployment and record stricter current limits.
 
 ## Cloudtype service contract
 
@@ -70,14 +70,21 @@ DATABASE_STATEMENT_TIMEOUT_MS=10000
 JWT_ACCESS_SECRET=<32+ random characters>
 VERIFICATION_CODE_SECRET=<32+ random characters>
 RATE_LIMIT_HASH_SECRET=<different 32+ random characters>
-TRUST_PROXY_HOPS=0
+TRUST_PROXY_HOPS=1
 CORS_ORIGINS=https://jagalchi.justn.me
 WEB_APP_URL=https://jagalchi.justn.me
 PUBLIC_API_URL=<generated Cloudtype HTTPS origin>
 AI_FEATURES_ENABLED=false
 UPLOADS_ENABLED=false
-EVIDENCE_EXECUTION_ENABLED=false
+EVIDENCE_EXECUTION_ENABLED=true
 PUBLIC_PROOF_PROFILE_ENABLED=false
+GITHUB_APP_ID=<numeric app id>
+GITHUB_APP_PRIVATE_KEY=<PEM private key>
+GITHUB_APP_WEBHOOK_SECRET=<32+ random characters>
+GITHUB_APP_SLUG=<app slug>
+GITHUB_APP_SETUP_URL=<exact github.com HTTPS URL>
+RESEND_API_KEY=<send-only Resend API key>
+EMAIL_FROM=Jagalchi <no-reply@mail.jagalchi.justn.me>
 ```
 
 Do not install dummy AI, object-storage, GitHub App, email, OAuth, or IAP credentials while the corresponding feature is disabled. Invalid/missing production flags, non-TLS database settings, synchronization, wildcard/localhost/path origins, or unsafe proxy hops must fail startup.
@@ -86,7 +93,7 @@ Do not install dummy AI, object-storage, GitHub App, email, OAuth, or IAP creden
 
 - `POST /api/ai/jobs` returns 503 `AI_FEATURES_DISABLED` before payload normalization, ticket reservation, token creation, URL construction, or network access.
 - Every upload create/complete/download/delete operation returns 503 `UPLOADS_DISABLED` before roadmap, repository, metadata, S3, or presigner access.
-- Evidence Execution and public Proof controllers remain unavailable because their flags are explicitly false.
+- Public Proof remains unavailable because its flag is false. Evidence Execution is enabled only with the verified GitHub App installation, repository scope, webhook signature, and separate-reviewer controls.
 
 Never report fake provider success or grant tickets without verified server fulfillment.
 
@@ -133,9 +140,9 @@ LOCAL_VERIFIED
 -> SYNTHETIC_CLOSED_ALPHA
 ```
 
-Before `SYNTHETIC_CLOSED_ALPHA`, verify migrations on fresh/existing schemas, TLS failure behavior, readiness loss/recovery, exact CORS, auth/authorization, disabled 503 side effects, malformed/oversized bodies, threshold+1 429s, pool bounds, logs, stop/resume persistence, and previous-SHA rollback. The initial synthetic cohort is at most five accounts.
+Migrations, TLS, exact CORS, auth/authorization, disabled-feature side effects, malformed/oversized bodies, threshold+1 429s, pool bounds, logs, export/restore, stop/start persistence, and previous-SHA rollback have production or production-equivalent evidence. The initial cohort remains capped at five accounts.
 
-Real users remain blocked until a zero-cost export and restore drill succeeds with disposable data. Until then the database is synthetic/disposable and has no RPO/RTO claim. After proof, real closed alpha remains capped at five accounts for this run.
+Real users remain blocked because the Cloudtype Free daily stop did not recover without human intervention. The next gate is a personal-server deployment with stable Supabase allowlisting, HTTPS ingress, restart recovery, and rollback to the current Cloudtype artifact.
 
 Freeze invitations at 80% of any current Free quota and stop at these documented ceilings unless the dashboard shows stricter values: 48 concurrent gateway connections, 48 requests/second, 480 requests/minute, 8 GB monthly traffic, 160 monthly build minutes, and 0.8 GB final image. Reserve rollback build capacity before baseline.
 
@@ -156,8 +163,8 @@ Record identifiers and results only. Never record secret values, full database U
 
 | Field | Value |
 |---|---|
-| Evidence date | 2026-08-27 KST |
-| Reviewed source SHA | `7ec4a8af0a59fe1e55f17c6c4df96634d9f65161` |
+| Evidence date | 2026-08-28 KST |
+| Production Web/API source | `2f76c80a20128adac0ce3f3630e04d12bd722393` / `ec82755385818f6e09b58f107b8bfc74aded7aae` |
 | Cloudtype service | `@justn-hyeok/beatyavibe:main/jagalchi-api` / `mtb19ap69e746959` |
 | Cloudtype plan/limit review and ₩0 confirmation | Free, one 512 MB replica, 1/4 services, no new payment accepted |
 | Supabase plan/limit review and ₩0 confirmation | Free, Seoul Nano, no paid IPv4 add-on accepted |
@@ -167,8 +174,8 @@ Record identifiers and results only. Never record secret values, full database U
 | Baseline/final proxy trust values | `0` insufficient behind ingress; `1` passed changing-XFF threshold proof |
 | Healthz/Recreate/single-runner proof | `/api/health/ready`, Recreate, one running replica |
 | Build/image | observed image `79,529,017` bytes; cached rebuild 8–9 seconds |
-| CORS/auth/disabled/rate/body/pool smoke | CORS and 413 passed; rate request 61 returned 429; auth/disabled production smoke pending accounts |
-| Stop/resume persistence | local proof complete; production daily-stop proof pending |
-| Export/restore drill | pending |
-| Previous-SHA rollback | pending |
+| CORS/auth/disabled/rate/body/pool smoke | CORS and 413 passed; rate request 61 returned 429; production account and Evidence flows completed |
+| Stop/resume persistence | manual stop/start preserved DB-backed response; actual daily stop had no automatic recovery for 15m20s+ |
+| Export/restore drill | 341,786-byte dump restored; migration 9 and 13 tracked row counts matched |
+| Previous-SHA rollback | Cloudtype and Vercel rollback/forward completed; baseline restored |
 | Remaining blockers | [`CLOSED_ALPHA_REMAINING.md`](./CLOSED_ALPHA_REMAINING.md) |
