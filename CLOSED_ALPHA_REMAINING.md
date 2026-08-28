@@ -2,11 +2,11 @@
 
 기준 시각: 2026-08-28 KST
 
-현재 production Web 소스: `2f76c80a20128adac0ce3f3630e04d12bd722393`
+현재 production Web: `https://jagalchi.justn.me`이 가리키는 latest `READY` main deployment. 정확한 SHA는 Vercel deployment metadata에서 읽는다.
 
 현재 production API 소스: `ec82755385818f6e09b58f107b8bfc74aded7aae`
 
-이 문서는 최대 5계정 closed alpha의 현재 출시 판정과 다음 실행 게이트만 관리한다. Web과 API는 별도 provider에서 배포되므로 위 SHA 두 개가 승인된 production 조합이다. 비밀값, 전체 데이터베이스 URL, 토큰, 인증번호, 개인 이메일은 기록하지 않는다. 상세 운영 증거의 정본은 GitHub Issue [#13](https://github.com/gajaedev/jagalchi-platform/issues/13)이다.
+이 문서는 최대 5계정 closed alpha의 현재 출시 판정과 다음 실행 게이트만 관리한다. Web은 Vercel이 main을 자동 배포하고 API는 Cloudtype artifact를 별도로 고정하므로 두 provider의 source를 각각 확인한다. 비밀값, 전체 데이터베이스 URL, 토큰, 인증번호, 개인 이메일은 기록하지 않는다. 상세 운영 증거의 정본은 GitHub Issue [#13](https://github.com/gajaedev/jagalchi-platform/issues/13)이다.
 
 ## 출시 판정
 

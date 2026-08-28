@@ -164,7 +164,7 @@ Record identifiers and results only. Never record secret values, full database U
 | Field | Value |
 |---|---|
 | Evidence date | 2026-08-28 KST |
-| Production Web/API source | `2f76c80a20128adac0ce3f3630e04d12bd722393` / `ec82755385818f6e09b58f107b8bfc74aded7aae` |
+| Production source policy | Web: latest `READY` main deployment from Vercel metadata; API: `ec82755385818f6e09b58f107b8bfc74aded7aae` |
 | Cloudtype service | `@justn-hyeok/beatyavibe:main/jagalchi-api` / `mtb19ap69e746959` |
 | Cloudtype plan/limit review and ₩0 confirmation | Free, one 512 MB replica, 1/4 services, no new payment accepted |
 | Supabase plan/limit review and ₩0 confirmation | Free, Seoul Nano, no paid IPv4 add-on accepted |
