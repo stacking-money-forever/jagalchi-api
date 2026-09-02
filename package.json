@@ -12,6 +12,7 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "migration:run": "tsx src/database/run-migrations.ts",
+    "migration:check": "tsx src/database/check-migrations.ts",
     "user-role:manage": "tsx src/auth/manage-user-role.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "vitest run",
