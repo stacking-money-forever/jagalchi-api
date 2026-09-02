@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import type { DataSource, EntityManager } from 'typeorm';
 import { TicketAccount } from '../entities/ticket-account.entity';
@@ -67,6 +67,7 @@ function createHarness(existingOwner = 'user-1') {
   } as unknown as DataSource;
   const apple = { verify: vi.fn(async () => verified) };
   const service = new TicketPurchasesService(
+    { get: (key: string) => (key === 'IAP_ENABLED' ? 'true' : undefined) } as never,
     dataSource,
     apple as never,
     { verify: vi.fn() } as never,
@@ -82,6 +83,7 @@ describe('TicketPurchasesService', () => {
     } as unknown as DataSource;
     const verifierError = new Error('invalid provider proof');
     const service = new TicketPurchasesService(
+      { get: (key: string) => (key === 'IAP_ENABLED' ? 'true' : undefined) } as never,
       dataSource,
       { verify: vi.fn(async () => Promise.reject(verifierError)) } as never,
       { verify: vi.fn() } as never,
@@ -94,6 +96,30 @@ describe('TicketPurchasesService', () => {
         signedTransactionInfo: 'x'.repeat(100),
       }),
     ).rejects.toBe(verifierError);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before reading provider context or verifying a purchase when IAP is disabled', async () => {
+    const dataSource = { transaction: vi.fn() } as unknown as DataSource;
+    const apple = { verify: vi.fn() };
+    const bindings = { getContext: vi.fn() };
+    const service = new TicketPurchasesService(
+      { get: () => 'false' } as never,
+      dataSource,
+      apple as never,
+      { verify: vi.fn() } as never,
+      bindings as never,
+    );
+
+    expect(() => service.getContext('user-1')).toThrow(ServiceUnavailableException);
+    await expect(
+      service.fulfill('user-1', {
+        store: 'apple',
+        signedTransactionInfo: 'x'.repeat(100),
+      }),
+    ).rejects.toMatchObject({ response: { code: 'IAP_DISABLED' } });
+    expect(bindings.getContext).not.toHaveBeenCalled();
+    expect(apple.verify).not.toHaveBeenCalled();
     expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
 import { parseExactOrigins, validateEnvironment } from "./environment";
+
+const githubPrivateKey = generateKeyPairSync("rsa", {
+  modulusLength: 2048,
+  privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  publicKeyEncoding: { type: "spki", format: "pem" },
+}).privateKey;
 
 const productionEnvironment = (): Record<string, string> => ({
   NODE_ENV: "production",
@@ -24,6 +31,9 @@ const productionEnvironment = (): Record<string, string> => ({
   EVIDENCE_EXECUTION_ENABLED: "false",
   PUBLIC_PROOF_PROFILE_ENABLED: "false",
   OAUTH_ENABLED: "false",
+  OAUTH_APPLE_ENABLED: "false",
+  IAP_ENABLED: "false",
+  EMAIL_ENABLED: "true",
 });
 
 const fullProductionEnvironment = (): Record<string, string> => ({
@@ -39,13 +49,14 @@ const fullProductionEnvironment = (): Record<string, string> => ({
   OBJECT_STORAGE_PUBLIC_BASE_URL: "https://cdn.example.com",
   EVIDENCE_EXECUTION_ENABLED: "true",
   GITHUB_APP_ID: "123456",
-  GITHUB_APP_PRIVATE_KEY: "github-private-key",
+  GITHUB_APP_PRIVATE_KEY: githubPrivateKey,
   GITHUB_APP_WEBHOOK_SECRET: "e".repeat(32),
   GITHUB_APP_SLUG: "jagalchi-app",
   GITHUB_APP_SETUP_URL:
     "https://github.com/apps/jagalchi-app/installations/new",
   PUBLIC_PROOF_PROFILE_ENABLED: "true",
   OAUTH_ENABLED: "true",
+  OAUTH_APPLE_ENABLED: "true",
   OAUTH_GOOGLE_CLIENT_ID: "google-client-id",
   OAUTH_GOOGLE_CLIENT_SECRET: "google-client-secret",
   OAUTH_GITHUB_CLIENT_ID: "github-client-id",
@@ -58,6 +69,13 @@ const fullProductionEnvironment = (): Record<string, string> => ({
 });
 
 describe("validateEnvironment", () => {
+  it("allows plaintext PostgreSQL on the private Compose database hostname", () => {
+    const environment = productionEnvironment();
+    environment.DATABASE_URL =
+      "postgresql://jagalchi_api:password@api-db:5432/jagalchi_api";
+    environment.DATABASE_SSL = "false";
+    expect(() => validateEnvironment(environment)).not.toThrow();
+  });
   it("accepts the zero-cost production contract with Resend delivery", () => {
     const environment = productionEnvironment();
     expect(validateEnvironment(environment)).toBe(environment);
@@ -74,6 +92,8 @@ describe("validateEnvironment", () => {
     "EVIDENCE_EXECUTION_ENABLED",
     "PUBLIC_PROOF_PROFILE_ENABLED",
     "OAUTH_ENABLED",
+    "OAUTH_APPLE_ENABLED",
+    "IAP_ENABLED",
   ])("requires explicit production flag %s", (key) => {
     const environment = productionEnvironment();
     delete environment[key];
@@ -170,16 +190,48 @@ describe("validateEnvironment", () => {
     "OAUTH_GOOGLE_CLIENT_SECRET",
     "OAUTH_GITHUB_CLIENT_ID",
     "OAUTH_GITHUB_CLIENT_SECRET",
+  ])("requires web OAuth credential %s when OAuth is enabled", (key) => {
+    const environment = fullProductionEnvironment();
+    environment.OAUTH_APPLE_ENABLED = "false";
+    delete environment[key];
+    expect(() => validateEnvironment(environment)).toThrow(
+      `${key} is required`,
+    );
+  });
+
+  it.each([
     "OAUTH_APPLE_CLIENT_ID",
     "OAUTH_APPLE_TEAM_ID",
     "OAUTH_APPLE_KEY_ID",
     "OAUTH_APPLE_PRIVATE_KEY",
-  ])("requires OAuth credential %s when OAuth is enabled", (key) => {
+  ])("requires Apple OAuth credential %s only when Apple OAuth is enabled", (key) => {
     const environment = fullProductionEnvironment();
     delete environment[key];
     expect(() => validateEnvironment(environment)).toThrow(
       `${key} is required`,
     );
+  });
+
+  it("accepts web OAuth without Apple credentials when Apple OAuth is disabled", () => {
+    const environment = fullProductionEnvironment();
+    environment.OAUTH_APPLE_ENABLED = "false";
+    delete environment.OAUTH_APPLE_CLIENT_ID;
+    delete environment.OAUTH_APPLE_TEAM_ID;
+    delete environment.OAUTH_APPLE_KEY_ID;
+    delete environment.OAUTH_APPLE_PRIVATE_KEY;
+    expect(validateEnvironment(environment)).toBe(environment);
+  });
+
+  it("requires a dedicated binding secret only when IAP is enabled", () => {
+    const disabled = productionEnvironment();
+    expect(validateEnvironment(disabled)).toBe(disabled);
+
+    const enabled = { ...disabled, IAP_ENABLED: "true" };
+    expect(() => validateEnvironment(enabled)).toThrow(
+      "IAP_ACCOUNT_BINDING_SECRET is required",
+    );
+    enabled.IAP_ACCOUNT_BINDING_SECRET = "i".repeat(32);
+    expect(validateEnvironment(enabled)).toBe(enabled);
   });
 
   it("rejects an Apple private key that normalizes to empty", () => {

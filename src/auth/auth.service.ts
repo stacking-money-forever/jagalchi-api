@@ -655,7 +655,7 @@ export class AuthService {
     provider: OAuthProvider,
     requestedReturnUrl?: string,
   ): Promise<string> {
-    this.assertOAuthEnabled();
+    this.assertOAuthEnabled(provider);
     const returnUrl = this.validateReturnUrl(requestedReturnUrl);
     const state = randomBytes(32).toString("hex");
     const nonce = randomBytes(24).toString("hex");
@@ -705,7 +705,7 @@ export class AuthService {
     code: string,
     state: string,
   ): Promise<string> {
-    this.assertOAuthEnabled();
+    this.assertOAuthEnabled(provider);
     const attempt = await this.dataSource.transaction(async (manager) => {
       const attempts = manager.getRepository(OAuthAttempt);
       const current = await attempts.findOne({
@@ -1107,11 +1107,20 @@ export class AuthService {
     }
   }
 
-  private assertOAuthEnabled(): void {
+  private assertOAuthEnabled(provider?: OAuthProvider): void {
     if (this.config.get<string>("OAUTH_ENABLED") !== "true") {
       throw new ServiceUnavailableException({
         code: "OAUTH_DISABLED",
         message: "OAuth is unavailable",
+      });
+    }
+    if (
+      provider === OAuthProvider.Apple &&
+      this.config.get<string>("OAUTH_APPLE_ENABLED") !== "true"
+    ) {
+      throw new ServiceUnavailableException({
+        code: "OAUTH_PROVIDER_DISABLED",
+        message: "Apple OAuth is unavailable",
       });
     }
   }

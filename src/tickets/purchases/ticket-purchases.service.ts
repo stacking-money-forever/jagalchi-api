@@ -2,8 +2,10 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DataSource, EntityManager } from 'typeorm';
 import { FulfillTicketPurchaseDto } from '../dto/fulfill-ticket-purchase.dto';
 import { TicketAccount } from '../entities/ticket-account.entity';
@@ -33,6 +35,7 @@ export interface TicketPurchaseResult {
 @Injectable()
 export class TicketPurchasesService {
   constructor(
+    private readonly config: ConfigService,
     private readonly dataSource: DataSource,
     private readonly apple: ApplePurchaseVerifier,
     private readonly google: GooglePlayPurchaseVerifier,
@@ -40,6 +43,7 @@ export class TicketPurchasesService {
   ) {}
 
   getContext(userId: string) {
+    this.assertIapEnabled();
     return this.bindings.getContext(userId);
   }
 
@@ -47,6 +51,7 @@ export class TicketPurchasesService {
     userId: string,
     dto: FulfillTicketPurchaseDto,
   ): Promise<TicketPurchaseResult> {
+    this.assertIapEnabled();
     const verified = await this.verify(userId, dto);
     const pack = getTicketPackByProductId(verified.productId);
     if (!pack) throw new UnprocessableEntityException('Store product is not approved');
@@ -171,5 +176,14 @@ export class TicketPurchasesService {
       'code' in error &&
       (error as { code?: unknown }).code === '23505'
     );
+  }
+
+  private assertIapEnabled(): void {
+    if (this.config.get<string>('IAP_ENABLED') !== 'true') {
+      throw new ServiceUnavailableException({
+        code: 'IAP_DISABLED',
+        message: 'In-app purchases are unavailable',
+      });
+    }
   }
 }

@@ -1,3 +1,5 @@
+import { createPrivateKey } from "node:crypto";
+
 type Environment = Record<string, string | undefined>;
 
 const FEATURE_FLAGS = [
@@ -6,6 +8,9 @@ const FEATURE_FLAGS = [
   "EVIDENCE_EXECUTION_ENABLED",
   "PUBLIC_PROOF_PROFILE_ENABLED",
   "OAUTH_ENABLED",
+  "OAUTH_APPLE_ENABLED",
+  "IAP_ENABLED",
+  "EMAIL_ENABLED",
 ] as const;
 
 const required = (environment: Environment, key: string): string => {
@@ -131,7 +136,7 @@ export const validateEnvironment = (environment: Environment): Environment => {
     );
   }
 
-  if (production) {
+  if (production && environment.EMAIL_ENABLED === "true") {
     const resendApiKey = required(environment, "RESEND_API_KEY");
     if (!/^re_[A-Za-z0-9_-]{16,}$/.test(resendApiKey)) {
       throw new Error("RESEND_API_KEY must be a Resend API key");
@@ -153,9 +158,13 @@ export const validateEnvironment = (environment: Environment): Environment => {
     throw new Error("DATABASE_URL must use PostgreSQL");
   }
   if (production) {
-    if (!requiredBoolean(environment, "DATABASE_SSL"))
+    const databaseSsl = requiredBoolean(environment, "DATABASE_SSL");
+    const trustedLocalDatabase = ["api-db", "localhost", "127.0.0.1"].includes(
+      databaseUrl.hostname,
+    );
+    if (!databaseSsl && !trustedLocalDatabase)
       throw new Error("DATABASE_SSL must be true in production");
-    if (environment.DATABASE_SSL_CA !== undefined) {
+    if (environment.DATABASE_SSL_CA?.trim()) {
       const certificate = environment.DATABASE_SSL_CA.replace(
         /\\n/g,
         "\n",
@@ -218,7 +227,14 @@ export const validateEnvironment = (environment: Environment): Environment => {
   if (environment.EVIDENCE_EXECUTION_ENABLED === "true") {
     const appId = required(environment, "GITHUB_APP_ID");
     if (!/^\d+$/.test(appId)) throw new Error("GITHUB_APP_ID must be numeric");
-    required(environment, "GITHUB_APP_PRIVATE_KEY");
+    const privateKey = required(environment, "GITHUB_APP_PRIVATE_KEY")
+      .replace(/\\n/g, "\n")
+      .trim();
+    try {
+      createPrivateKey(privateKey);
+    } catch {
+      throw new Error("GITHUB_APP_PRIVATE_KEY must be a valid private key");
+    }
     const webhookSecret = required(environment, "GITHUB_APP_WEBHOOK_SECRET");
     if (webhookSecret.length < 32) {
       throw new Error(
@@ -240,6 +256,12 @@ export const validateEnvironment = (environment: Environment): Environment => {
     required(environment, "OAUTH_GOOGLE_CLIENT_SECRET");
     required(environment, "OAUTH_GITHUB_CLIENT_ID");
     required(environment, "OAUTH_GITHUB_CLIENT_SECRET");
+  }
+
+  if (environment.OAUTH_APPLE_ENABLED === "true") {
+    if (environment.OAUTH_ENABLED !== "true") {
+      throw new Error("OAUTH_ENABLED must be true when OAUTH_APPLE_ENABLED is true");
+    }
     required(environment, "OAUTH_APPLE_CLIENT_ID");
     required(environment, "OAUTH_APPLE_TEAM_ID");
     required(environment, "OAUTH_APPLE_KEY_ID");
@@ -249,6 +271,15 @@ export const validateEnvironment = (environment: Environment): Environment => {
     if (!applePrivateKey) {
       throw new Error(
         "OAUTH_APPLE_PRIVATE_KEY must contain a non-empty private key",
+      );
+    }
+  }
+
+  if (environment.IAP_ENABLED === "true") {
+    const bindingSecret = required(environment, "IAP_ACCOUNT_BINDING_SECRET");
+    if (bindingSecret.length < 32) {
+      throw new Error(
+        "IAP_ACCOUNT_BINDING_SECRET must contain at least 32 characters",
       );
     }
   }

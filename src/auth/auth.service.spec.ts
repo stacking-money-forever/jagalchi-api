@@ -70,6 +70,7 @@ describe("AuthService", () => {
       WEB_APP_URL: "https://jagalchi.dev",
       PUBLIC_API_URL: "https://api.jagalchi.dev",
       OAUTH_ENABLED: "true",
+      OAUTH_APPLE_ENABLED: "false",
       OAUTH_GOOGLE_CLIENT_ID: "google-client",
       VERIFICATION_CODE_SECRET: "verification-code-secret-with-32-characters",
       RESEND_API_KEY: "re_test_delivery_key",
@@ -191,6 +192,37 @@ describe("AuthService", () => {
     expect(subject.dataSource.transaction).not.toHaveBeenCalled();
     expect(subject.config.getOrThrow).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps web OAuth enabled while Apple OAuth is disabled", async () => {
+    const subject = createSubject();
+
+    await expect(
+      subject.service.startOAuth(OAuthProvider.Apple),
+    ).rejects.toMatchObject({
+      response: {
+        code: "OAUTH_PROVIDER_DISABLED",
+        message: "Apple OAuth is unavailable",
+      },
+    });
+    await expect(
+      subject.service.startOAuth(OAuthProvider.Google),
+    ).resolves.toContain("https://accounts.google.com/");
+  });
+
+  it("rejects a disabled Apple callback before consuming OAuth state", async () => {
+    const subject = createSubject();
+
+    await expect(
+      subject.service.completeOAuth(
+        OAuthProvider.Apple,
+        "provider-code",
+        "oauth-state",
+      ),
+    ).rejects.toMatchObject({
+      response: { code: "OAUTH_PROVIDER_DISABLED" },
+    });
+    expect(subject.dataSource.transaction).not.toHaveBeenCalled();
   });
 
   it.each([

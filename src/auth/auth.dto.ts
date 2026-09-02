@@ -58,6 +58,12 @@ export class OAuthCallbackQueryDto {
   @Matches(/^[a-f0-9]{64}$/)
   state: string;
 
+  // Google includes the OpenID Connect issuer on successful callbacks.
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ['https'] })
+  @MaxLength(200)
+  iss?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(2_048)
