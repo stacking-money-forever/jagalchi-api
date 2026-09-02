@@ -2,19 +2,19 @@ FROM node:24-alpine AS builder
 WORKDIR /workspace
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY services/api/package.json services/api/package.json
-RUN pnpm install --filter @jagalchi/api... --frozen-lockfile
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
-COPY services/api services/api
-RUN pnpm --filter @jagalchi/api build
-RUN pnpm --filter @jagalchi/api deploy --prod /app
+COPY . .
+RUN pnpm build
+RUN pnpm prune --prod
 
 FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=builder /app ./
-COPY --from=builder /workspace/services/api/dist ./dist
+COPY --from=builder /workspace/package.json ./package.json
+COPY --from=builder /workspace/node_modules ./node_modules
+COPY --from=builder /workspace/dist ./dist
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \

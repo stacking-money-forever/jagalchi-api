@@ -1,24 +1,24 @@
 # Jagalchi NestJS API
 
-This package is the canonical NestJS backend for Jagalchi. The temporary zero-cost alpha deployment runs one API container on Cloudtype Free and stores durable state only in Supabase Free PostgreSQL. Django AI, uploads, and public Proof are disabled; the verified GitHub Evidence flow is enabled.
+This repository is the canonical NestJS product API for Jagalchi. The Django AI runtime lives in [`stacking-money-forever/jagalchi-ai`](https://github.com/stacking-money-forever/jagalchi-ai), and cross-service production deployment lives in [`stacking-money-forever/jagalchi-infra`](https://github.com/stacking-money-forever/jagalchi-infra).
 
 Completed release evidence, the failed Cloudtype availability gate, and the personal-server cutover plan are tracked in [`CLOSED_ALPHA_REMAINING.md`](./CLOSED_ALPHA_REMAINING.md).
 
 ## Local verification
 
-From the monorepo root:
+From this repository root:
 
 ```sh
-pnpm --filter @jagalchi/api lint
-pnpm --filter @jagalchi/api test
-pnpm --filter @jagalchi/api build
-pnpm --filter @jagalchi/api migration:run
+pnpm lint
+pnpm test
+pnpm build
+pnpm migration:run
 ```
 
-The production image must be built with the repository root as context:
+The production image is built from this repository root:
 
 ```sh
-docker build -f services/api/Dockerfile -t jagalchi-api:local .
+docker build -t jagalchi-api:local .
 ```
 
 The container runs as the non-root `node` user. Startup runs every pending migration and starts Nest only after migrations succeed. Migration failure exits nonzero. `GET /api/health` is process liveness; `GET /api/health/ready` performs a bounded `SELECT 1` and is the Cloudtype Healthz target.
@@ -38,9 +38,9 @@ Cloudtype Free is temporary fallback infrastructure: one replica, Recreate updat
 
 | Setting | Required value |
 |---|---|
-| Repository | public `gajaedev/jagalchi-platform` |
+| Repository | public `stacking-money-forever/jagalchi-api` |
 | Build context | repository root |
-| Dockerfile | `services/api/Dockerfile` |
+| Dockerfile | `Dockerfile` |
 | Branch/SHA | exact reviewed and pushed SHA |
 | Service count | 1 |
 | Replica/update | 1 replica, Recreate |
