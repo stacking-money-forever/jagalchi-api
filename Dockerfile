@@ -7,7 +7,7 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm build
-RUN pnpm prune --prod
+RUN CI=true pnpm prune --prod
 
 FROM node:24-alpine AS runtime
 WORKDIR /app
