@@ -3,13 +3,15 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
+  Redirect,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiFoundResponse, ApiTags } from '@nestjs/swagger';
 import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -34,6 +36,17 @@ export class UploadsController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     return this.uploads.complete(user.id, id);
+  }
+
+  @Get(':id/content')
+  @Redirect(undefined, 302)
+  @Header('Cache-Control', 'private, no-store, max-age=0')
+  @ApiFoundResponse({ description: 'Redirects to a fresh private signed download URL' })
+  async getContent(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return { url: await this.uploads.getContentUrl(user.id, id), statusCode: 302 };
   }
 
   @Get(':id')

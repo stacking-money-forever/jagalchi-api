@@ -25,6 +25,8 @@ import { UploadAsset, UploadPurpose, UploadStatus } from './upload-asset.entity'
 export class UploadsService {
   private readonly bucket: string | null;
   private readonly client: S3Client | null;
+  private readonly presignClient: S3Client | null;
+  private readonly presignOrigin: string | null;
   private readonly publicBaseUrl: URL | null;
 
   constructor(
@@ -36,6 +38,8 @@ export class UploadsService {
     if (config.get<string>('UPLOADS_ENABLED') === 'false') {
       this.bucket = null;
       this.client = null;
+      this.presignClient = null;
+      this.presignOrigin = null;
       this.publicBaseUrl = null;
       return;
     }
@@ -43,22 +47,32 @@ export class UploadsService {
     this.publicBaseUrl = new URL(
       config.getOrThrow<string>('OBJECT_STORAGE_PUBLIC_BASE_URL'),
     );
-    if (this.publicBaseUrl.protocol !== 'https:') {
-      throw new Error('OBJECT_STORAGE_PUBLIC_BASE_URL must use HTTPS');
-    }
+    this.assertBrowserUrl(this.publicBaseUrl, 'OBJECT_STORAGE_PUBLIC_BASE_URL', config.get<string>('NODE_ENV') === 'production', false);
+    const region = config.getOrThrow<string>('OBJECT_STORAGE_REGION');
+    const forcePathStyle = config.get<string>('OBJECT_STORAGE_FORCE_PATH_STYLE') === 'true';
+    const credentials = {
+      accessKeyId: config.getOrThrow<string>('OBJECT_STORAGE_ACCESS_KEY_ID'),
+      secretAccessKey: config.getOrThrow<string>('OBJECT_STORAGE_SECRET_ACCESS_KEY'),
+    };
     this.client = new S3Client({
-      region: config.getOrThrow<string>('OBJECT_STORAGE_REGION'),
+      region,
       endpoint: config.get<string>('OBJECT_STORAGE_ENDPOINT') || undefined,
-      forcePathStyle: config.get<string>('OBJECT_STORAGE_FORCE_PATH_STYLE') === 'true',
-      credentials: {
-        accessKeyId: config.getOrThrow<string>('OBJECT_STORAGE_ACCESS_KEY_ID'),
-        secretAccessKey: config.getOrThrow<string>('OBJECT_STORAGE_SECRET_ACCESS_KEY'),
-      },
+      forcePathStyle,
+      credentials,
+    });
+    const presignEndpoint = new URL(config.getOrThrow<string>('OBJECT_STORAGE_PRESIGN_ENDPOINT'));
+    this.assertBrowserUrl(presignEndpoint, 'OBJECT_STORAGE_PRESIGN_ENDPOINT', config.get<string>('NODE_ENV') === 'production', true);
+    this.presignOrigin = presignEndpoint.origin;
+    this.presignClient = new S3Client({
+      region,
+      endpoint: presignEndpoint.toString(),
+      forcePathStyle,
+      credentials,
     });
   }
 
   async createUpload(ownerId: string, dto: CreateUploadDto) {
-    const { bucket, client } = this.requireStorage();
+    const { bucket, presignClient } = this.requireStorage();
     if (dto.purpose === UploadPurpose.ProfileImage) {
       if (dto.roadmapId || !dto.contentType.startsWith('image/')) {
         throw new BadRequestException('Profile uploads must be an image');
@@ -88,7 +102,7 @@ export class UploadsService {
       }),
     );
     const uploadUrl = await getSignedUrl(
-      client,
+      presignClient,
       new PutObjectCommand({
         Bucket: bucket,
         Key: objectKey,
@@ -97,6 +111,7 @@ export class UploadsService {
       }),
       { expiresIn: 10 * 60 },
     );
+    this.assertGeneratedSignedUrl(uploadUrl);
     return {
       id: asset.id,
       uploadUrl,
@@ -128,13 +143,13 @@ export class UploadsService {
   }
 
   async getDownload(ownerId: string, assetId: string) {
-    const { bucket, client } = this.requireStorage();
+    const { bucket, presignClient } = this.requireStorage();
     const asset = await this.getOwned(ownerId, assetId);
     if (asset.status !== UploadStatus.Ready) {
       throw new BadRequestException('Upload is not complete');
     }
     const downloadUrl = await getSignedUrl(
-      client,
+      presignClient,
       new GetObjectCommand({
         Bucket: bucket,
         Key: asset.objectKey,
@@ -142,7 +157,13 @@ export class UploadsService {
       }),
       { expiresIn: 5 * 60 },
     );
+    this.assertGeneratedSignedUrl(downloadUrl);
     return { ...this.toResponse(asset), downloadUrl, expiresInSeconds: 5 * 60 };
+  }
+
+  async getContentUrl(ownerId: string, assetId: string): Promise<string> {
+    const download = await this.getDownload(ownerId, assetId);
+    return download.downloadUrl;
   }
 
   async remove(ownerId: string, assetId: string): Promise<void> {
@@ -154,8 +175,8 @@ export class UploadsService {
     await this.assets.delete({ id: asset.id });
   }
 
-  private requireStorage(): { bucket: string; client: S3Client; publicBaseUrl: URL } {
-    if (!this.bucket || !this.client || !this.publicBaseUrl) {
+  private requireStorage(): { bucket: string; client: S3Client; presignClient: S3Client; publicBaseUrl: URL } {
+    if (!this.bucket || !this.client || !this.presignClient || !this.publicBaseUrl) {
       throw new ServiceUnavailableException({
         code: 'UPLOADS_DISABLED',
         message: 'Uploads are unavailable',
@@ -164,8 +185,26 @@ export class UploadsService {
     return {
       bucket: this.bucket,
       client: this.client,
+      presignClient: this.presignClient,
       publicBaseUrl: this.publicBaseUrl,
     };
+  }
+
+  private assertBrowserUrl(url: URL, key: string, production: boolean, exactOrigin: boolean): void {
+    const loopback = ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && !production && loopback)) {
+      throw new Error(`${key} must use HTTPS or development loopback HTTP`);
+    }
+    if (url.username || url.password || url.search || url.hash || (exactOrigin && url.pathname !== '/')) {
+      throw new Error(`${key} must be a safe browser URL`);
+    }
+  }
+
+  private assertGeneratedSignedUrl(value: string): void {
+    const url = new URL(value);
+    if (!this.presignOrigin || url.origin !== this.presignOrigin) {
+      throw new Error('Generated storage signature uses an unexpected browser origin');
+    }
   }
 
   private async getOwned(ownerId: string, assetId: string): Promise<UploadAsset> {
