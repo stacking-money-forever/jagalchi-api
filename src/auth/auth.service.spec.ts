@@ -155,6 +155,34 @@ describe("AuthService", () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
+  it('revokes the complete refresh family when a rotated token is reused', async () => {
+    const subject = createSubject();
+    const rotated = {
+      id: 'session-old',
+      userId: 'user-1',
+      familyId: '00000000-0000-4000-8000-000000000099',
+      revokedAt: new Date(),
+      replacedById: 'session-new',
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const sessions = {
+      findOne: vi.fn().mockResolvedValue(rotated),
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+    };
+    subject.dataSource.transaction.mockImplementation(async (callback) => callback({
+      getRepository: (entity: unknown) => entity === RefreshSession ? sessions : subject.users,
+      query: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    await expect(subject.service.refresh('reused-refresh-token')).rejects.toMatchObject({
+      response: { code: 'REFRESH_REUSE_DETECTED', message: 'Refresh token reuse detected' },
+    });
+    expect(sessions.update).toHaveBeenCalledWith(
+      { familyId: rotated.familyId, revokedAt: expect.anything() },
+      { revokedAt: expect.any(Date) },
+    );
+  });
+
   it("creates a stateful PKCE Google authorization request", async () => {
     const subject = createSubject();
     const url = new URL(await subject.service.startOAuth(OAuthProvider.Google));

@@ -10,22 +10,27 @@ import {
   IsObject,
 } from 'class-validator';
 import { OAuthProvider } from './auth.entities';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterDto {
+  @ApiProperty({ type: String, format: 'email', maxLength: 254 })
   @IsEmail()
   @MaxLength(254)
   email: string;
 
+  @ApiProperty({ type: String, minLength: 2, maxLength: 60 })
   @IsString()
   @MinLength(2)
   @MaxLength(60)
   name: string;
 
+  @ApiProperty({ type: String, minLength: 10, maxLength: 128 })
   @IsString()
   @MinLength(10)
   @MaxLength(128)
   password: string;
 
+  @ApiProperty({ type: String, minLength: 32, maxLength: 2048 })
   @IsString()
   @MinLength(32)
   @MaxLength(2_048)
@@ -33,13 +38,47 @@ export class RegisterDto {
 }
 
 export class LoginDto {
+  @ApiProperty({ type: String, format: 'email', maxLength: 254 })
   @IsEmail()
   @MaxLength(254)
   email: string;
 
+  @ApiProperty({ type: String, maxLength: 128 })
   @IsString()
   @MaxLength(128)
   password: string;
+}
+
+export class NativeRefreshDto {
+  @ApiProperty({ type: String, minLength: 32, maxLength: 256 })
+  @IsString()
+  @MinLength(32)
+  @MaxLength(256)
+  refreshToken: string;
+}
+
+export class NativeLogoutDto extends NativeRefreshDto {}
+
+export class NativeAuthUserDto {
+  @ApiProperty({ type: String, format: 'uuid' }) id: string;
+  @ApiProperty({ type: String, format: 'email' }) email: string;
+  @ApiProperty({ type: String }) name: string;
+  @ApiProperty({ type: [String] }) roles: string[];
+}
+
+export class NativeAuthResponse {
+  @ApiProperty({ type: String }) accessToken: string;
+  @ApiProperty({ type: String }) refreshToken: string;
+  @ApiProperty({ type: () => NativeAuthUserDto }) user: NativeAuthUserDto;
+}
+
+export class WebAuthResponse {
+  @ApiProperty({ type: String }) accessToken: string;
+  @ApiProperty({ type: () => NativeAuthUserDto }) user: NativeAuthUserDto;
+}
+
+export class WebRegistrationResponse extends NativeAuthUserDto {
+  @ApiProperty({ type: String }) accessToken: string;
 }
 
 export class OAuthStartQueryDto {
@@ -86,6 +125,7 @@ export class OAuthCallbackQueryDto {
 }
 
 export class OAuthExchangeDto {
+  @ApiProperty({ type: String, minLength: 32, maxLength: 256 })
   @IsString()
   @Matches(/^[A-Za-z0-9_-]{32,256}$/)
   code: string;

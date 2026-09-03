@@ -1,6 +1,7 @@
 import {
   Body,
   BadRequestException,
+  ForbiddenException,
   Controller,
   Delete,
   Get,
@@ -15,9 +16,14 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
   LoginDto,
+  NativeLogoutDto,
+  NativeRefreshDto,
+  NativeAuthResponse,
+  WebAuthResponse,
+  WebRegistrationResponse,
   OAuthCallbackQueryDto,
   OAuthExchangeDto,
   OAuthStartQueryDto,
@@ -73,6 +79,8 @@ export class UsersController {
 
   @Post()
   @RateLimited('entry')
+  @ApiOkResponse({ type: WebRegistrationResponse })
+  @ApiBody({ type: RegisterDto })
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) response: CookieResponse) {
     const result = await this.auth.register(dto);
     this.setRefreshCookie(response, result.refreshToken);
@@ -135,10 +143,53 @@ export class AuthController {
   @Post('login')
   @RateLimited('entry')
   @HttpCode(200)
+  @ApiOkResponse({ type: WebAuthResponse })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: CookieResponse) {
     const result = await this.auth.login(dto);
     this.setRefreshCookie(response, result.refreshToken);
     return { accessToken: result.accessToken, user: result.user };
+  }
+
+  @Post('native/register')
+  @RateLimited('entry')
+  @ApiOkResponse({ type: NativeAuthResponse })
+  @ApiBody({ type: RegisterDto })
+  nativeRegister(@Headers('origin') origin: string | undefined, @Body() dto: RegisterDto): Promise<NativeAuthResponse> {
+    this.assertNativePublicClient(origin);
+    return this.auth.register(dto);
+  }
+
+  @Post('native/login')
+  @RateLimited('entry')
+  @HttpCode(200)
+  @ApiOkResponse({ type: NativeAuthResponse })
+  @ApiBody({ type: LoginDto })
+  nativeLogin(@Headers('origin') origin: string | undefined, @Body() dto: LoginDto): Promise<NativeAuthResponse> {
+    this.assertNativePublicClient(origin);
+    return this.auth.login(dto);
+  }
+
+  @Patch('native/refresh')
+  @RateLimited('completion')
+  @ApiOkResponse({ type: NativeAuthResponse })
+  @ApiBody({ type: NativeRefreshDto })
+  nativeRefresh(
+    @Headers('origin') origin: string | undefined,
+    @Body() dto: NativeRefreshDto,
+  ): Promise<NativeAuthResponse> {
+    this.assertNativePublicClient(origin);
+    return this.auth.refresh(dto.refreshToken);
+  }
+
+  @Post('native/logout')
+  @HttpCode(204)
+  @ApiBody({ type: NativeLogoutDto })
+  async nativeLogout(
+    @Headers('origin') origin: string | undefined,
+    @Body() dto: NativeLogoutDto,
+  ): Promise<void> {
+    this.assertNativePublicClient(origin);
+    await this.auth.revoke(dto.refreshToken);
   }
 
   @Post('password-reset')
@@ -163,6 +214,7 @@ export class AuthController {
 
   @Patch('refresh')
   @RateLimited('completion')
+  @ApiOkResponse({ type: WebAuthResponse })
   async refresh(
     @Headers('cookie') cookie: string | undefined,
     @Res({ passthrough: true }) response: CookieResponse,
@@ -221,6 +273,7 @@ export class AuthController {
   @Post('oauth/exchange')
   @RateLimited('completion')
   @HttpCode(200)
+  @ApiOkResponse({ type: WebAuthResponse })
   async exchangeOAuth(
     @Body() dto: OAuthExchangeDto,
     @Res({ passthrough: true }) response: CookieResponse,
@@ -228,6 +281,28 @@ export class AuthController {
     const result = await this.auth.exchangeOAuthGrant(dto.code);
     this.setRefreshCookie(response, result.refreshToken);
     return { accessToken: result.accessToken, user: result.user };
+  }
+
+  @Post('native/oauth/exchange')
+  @RateLimited('completion')
+  @HttpCode(200)
+  @ApiOkResponse({ type: NativeAuthResponse })
+  @ApiBody({ type: OAuthExchangeDto })
+  nativeExchangeOAuth(
+    @Headers('origin') origin: string | undefined,
+    @Body() dto: OAuthExchangeDto,
+  ): Promise<NativeAuthResponse> {
+    this.assertNativePublicClient(origin);
+    return this.auth.exchangeOAuthGrant(dto.code);
+  }
+
+  private assertNativePublicClient(origin: string | undefined): void {
+    if (origin?.trim()) {
+      throw new ForbiddenException({
+        code: 'NATIVE_BROWSER_ORIGIN_REJECTED',
+        message: 'Native token endpoints do not accept browser origins',
+      });
+    }
   }
 
   private setRefreshCookie(response: CookieResponse, token: string): void {

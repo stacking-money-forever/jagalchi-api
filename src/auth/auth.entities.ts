@@ -87,6 +87,10 @@ export class RefreshSession {
   @Index()
   userId: string;
 
+  @Column('uuid', { name: 'family_id', default: () => 'gen_random_uuid()' })
+  @Index()
+  familyId: string;
+
   @Column({ name: 'token_hash', type: 'char', length: 64, unique: true })
   tokenHash: string;
 

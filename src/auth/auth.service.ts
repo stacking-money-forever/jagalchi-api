@@ -18,6 +18,7 @@ import {
   createHmac,
   createPublicKey,
   randomBytes,
+  randomUUID,
   randomInt,
   sign as cryptoSign,
   timingSafeEqual,
@@ -93,7 +94,7 @@ function verificationEmailContent(
   };
 }
 
-interface AuthResult {
+export interface AuthResult {
   accessToken: string;
   refreshToken: string;
   user: Pick<User, "id" | "email" | "name" | "roles">;
@@ -617,30 +618,43 @@ export class AuthService {
 
   async refresh(rawToken: string): Promise<AuthResult> {
     const tokenHash = this.hashToken(rawToken);
-    return this.dataSource.transaction(async (manager) => {
+    const outcome = await this.dataSource.transaction(async (manager) => {
       const sessions = manager.getRepository(RefreshSession);
+      const observed = await sessions.findOne({ where: { tokenHash } });
+      if (!observed) throw new UnauthorizedException("Refresh session is not valid");
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [observed.familyId]);
       const session = await sessions.findOne({
-        where: {
-          tokenHash,
-          revokedAt: IsNull(),
-          expiresAt: MoreThan(new Date()),
-        },
+        where: { tokenHash, familyId: observed.familyId },
         lock: { mode: "pessimistic_write" },
       });
-      if (!session)
+      if (!session || session.expiresAt.getTime() <= Date.now())
         throw new UnauthorizedException("Refresh session is not valid");
+      if (session.revokedAt || session.replacedById) {
+        await sessions.update(
+          { familyId: session.familyId, revokedAt: IsNull() },
+          { revokedAt: new Date() },
+        );
+        return { reuseDetected: true as const };
+      }
       const user = await manager.getRepository(User).findOne({
         where: { id: session.userId, status: UserStatus.Active },
       });
       if (!user) throw new UnauthorizedException("User is not active");
 
       session.revokedAt = new Date();
-      const next = this.createRefreshSession(sessions, user.id);
+      const next = this.createRefreshSession(sessions, user.id, session.familyId);
       await sessions.save(next.session);
       session.replacedById = next.session.id;
       await sessions.save(session);
-      return this.buildAuthResult(user, next.rawToken);
+      return { reuseDetected: false as const, result: await this.buildAuthResult(user, next.rawToken) };
     });
+    if (outcome.reuseDetected) {
+      throw new UnauthorizedException({
+        code: 'REFRESH_REUSE_DETECTED',
+        message: 'Refresh token reuse detected',
+      });
+    }
+    return outcome.result;
   }
 
   async revoke(rawToken: string | undefined): Promise<void> {
@@ -792,12 +806,14 @@ export class AuthService {
   private createRefreshSession(
     repository: Repository<RefreshSession>,
     userId: string,
+    familyId: string = randomUUID(),
   ) {
     const rawToken = randomBytes(48).toString("base64url");
     return {
       rawToken,
       session: repository.create({
         userId,
+        familyId,
         tokenHash: this.hashToken(rawToken),
         expiresAt: new Date(Date.now() + REFRESH_TOKEN_DAYS * 86_400_000),
         revokedAt: null,
