@@ -27,7 +27,7 @@ describe('RealtimeGateway room broadcasts', () => {
         sequence: 7,
       })),
     };
-    const gateway = new RealtimeGateway({} as never, realtime as never);
+    const gateway = new RealtimeGateway(realtime as never, {} as never);
     const { client, emit } = createClient();
 
     await gateway.edit(
@@ -72,6 +72,35 @@ describe('RealtimeGateway room broadcasts', () => {
       roadmapId,
       actorId: client.data.userId,
     });
+  });
+});
+
+describe('RealtimeGateway connection tickets', () => {
+  const socket = (auth: Record<string, unknown>) => ({
+    id: 'socket-1', data: {}, disconnect: vi.fn(),
+    handshake: { address: '127.0.0.1', headers: {}, auth },
+  });
+
+  it('consumes an audience-bound one-time ticket and authenticates the socket', async () => {
+    const tickets = { consume: vi.fn().mockResolvedValue('user-1') };
+    const gateway = new RealtimeGateway({} as never, tickets as never);
+    const client = socket({ ticket: 'one-time-ticket' });
+    await gateway.handleConnection(client as never);
+    expect(tickets.consume).toHaveBeenCalledWith('one-time-ticket', 'roadmaps');
+    expect(client.data).toMatchObject({ userId: 'user-1', joinedRoadmaps: expect.any(Set) });
+    expect(client.disconnect).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing ticket', {}],
+    ['legacy bearer marker', { token: 'access-jwt' }],
+  ])('rejects %s without accepting legacy JWT auth', async (_label, auth) => {
+    const tickets = { consume: vi.fn() };
+    const gateway = new RealtimeGateway({} as never, tickets as never);
+    const client = socket(auth);
+    await gateway.handleConnection(client as never);
+    expect(client.disconnect).toHaveBeenCalledWith(true);
+    expect(tickets.consume).not.toHaveBeenCalled();
   });
 });
 

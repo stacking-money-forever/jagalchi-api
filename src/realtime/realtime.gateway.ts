@@ -1,4 +1,3 @@
-import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
   MessageBody,
@@ -12,6 +11,7 @@ import type { Server, Socket } from 'socket.io';
 import { parseExactOrigins } from '../shared/config/environment';
 import { RealtimeService, SequenceConflictError } from './realtime.service';
 import { parseEditRequest, type EditAck, type EditNack } from './realtime.types';
+import { RealtimeTicketService } from './realtime-ticket.service';
 
 const allowedOrigins = process.env.CORS_ORIGINS
   ? parseExactOrigins(process.env.CORS_ORIGINS, process.env.NODE_ENV === 'production')
@@ -64,8 +64,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   private readonly activeUsers = new Map<string, string>();
 
   constructor(
-    private readonly jwt: JwtService,
     private readonly realtime: RealtimeService,
+    private readonly tickets: RealtimeTicketService,
   ) {}
 
   async handleConnection(client: AuthenticatedSocket): Promise<void> {
@@ -80,23 +80,21 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
     client.data.clientIp = clientIp;
 
-    const authToken =
-      typeof client.handshake.auth?.token === 'string'
-        ? client.handshake.auth.token
-        : this.readBearer(client.handshake.headers.authorization);
-    if (!authToken) {
+    const realtimeTicket = typeof client.handshake.auth?.ticket === 'string'
+      ? client.handshake.auth.ticket
+      : undefined;
+    if (!realtimeTicket) {
       client.disconnect(true);
       return;
     }
-    try {
-      const payload = await this.jwt.verifyAsync<{ sub?: string }>(authToken);
-      if (!payload.sub || this.activeUsers.has(payload.sub)) throw new Error('Unavailable subject');
-      client.data.userId = payload.sub;
-      client.data.joinedRoadmaps = new Set();
-      this.activeUsers.set(payload.sub, client.id);
-    } catch {
+    const userId = await this.tickets.consume(realtimeTicket, 'roadmaps');
+    if (!userId || this.activeUsers.has(userId)) {
       client.disconnect(true);
+      return;
     }
+    client.data.userId = userId;
+    client.data.joinedRoadmaps = new Set();
+    this.activeUsers.set(userId, client.id);
   }
 
   handleDisconnect(client: AuthenticatedSocket): void {
@@ -215,8 +213,4 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     return `roadmap:${roadmapId}`;
   }
 
-  private readBearer(value: string | string[] | undefined): string | undefined {
-    if (typeof value !== 'string' || !value.startsWith('Bearer ')) return undefined;
-    return value.slice(7);
-  }
 }
