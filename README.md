@@ -13,7 +13,26 @@ pnpm lint
 pnpm test
 pnpm build
 pnpm migration:run
+pnpm contracts:check
+pnpm openapi:check
 ```
+
+For the standalone local harness, set `JAGALCHI_LOCAL_MODE`,
+`LOCAL_SEED_EMAIL`, and `LOCAL_SEED_PASSWORD` in the private mode-600 env file,
+then run `pnpm dev:seed -- --json`. The command is disabled in production and
+prints one JSON result containing only schema, user, Project Run, and Roadmap IDs.
+`local-real-source` uses live job intake and DeepSeek with fixture GitHub facts;
+`local-real` remains the later real-GitHub mode.
+
+The server-to-server AI v1 contract is published under `contracts/ai/v1/`. Its
+`manifest.json` maps every request/response schema to a SHA-256 digest and
+contains a deterministic `bundleSha256` for AI CI pinning. Regenerate it only
+through `pnpm contracts:generate`; `pnpm contracts:check` fails on drift.
+API CI also checks out `jagalchi-ai@main` and compares all eight schemas byte for
+byte. Contract changes therefore land in two phases: merge the reviewed AI
+consumer snapshot first, then merge the API producer change. Do not deploy the
+consumer-only intermediate state; the deployment lock must advance both images
+together.
 
 The production image is built from this repository root:
 
@@ -21,7 +40,7 @@ The production image is built from this repository root:
 docker build -t jagalchi-api:local .
 ```
 
-The container runs as the non-root `node` user. Startup runs every pending migration and starts Nest only after migrations succeed. Migration failure exits nonzero. `GET /api/health` is process liveness; `GET /api/health/ready` performs a bounded `SELECT 1` and is the Cloudtype Healthz target.
+The container runs as the non-root `node` user. API startup never runs migrations. Deployments must run the same image once with `pnpm start:migrate`, then start the API with the default command or the workflow worker with `pnpm worker:workflow`. The worker readiness probe is `pnpm workflow:health`; when Project Runs are enabled it requires both database access and a recent persisted worker heartbeat. Migration failure exits nonzero and must block API/worker rollout. `GET /api/health` is process liveness; `GET /api/health/ready` performs the same database and conditional worker-heartbeat checks and is the API Healthz target.
 
 ## Zero-cost provider gates
 
@@ -75,9 +94,21 @@ CORS_ORIGINS=https://jagalchi.justn.me
 WEB_APP_URL=https://jagalchi.justn.me
 PUBLIC_API_URL=<generated Cloudtype HTTPS origin>
 AI_FEATURES_ENABLED=false
+AI_PROVIDER=deepseek
+AI_TIMEOUT_MS=65000
+WORKFLOW_LEASE_MS=120000
+WORKFLOW_HEARTBEAT_MS=30000
+WORKFLOW_POLL_MS=1000
+WORKFLOW_RETRY_BASE_MS=1000
+WORKFLOW_RETRY_MAX_MS=30000
+WORKFLOW_HEALTH_MAX_AGE_MS=90000
+OBJECT_STORAGE_PRESIGN_ENDPOINT=https://storage.example.com
 UPLOADS_ENABLED=false
 EVIDENCE_EXECUTION_ENABLED=true
+GITHUB_PROVIDER=github
+JOB_SOURCE_PROVIDER=live
 PUBLIC_PROOF_PROFILE_ENABLED=false
+PROJECT_RUNS_ENABLED=false
 GITHUB_APP_ID=<numeric app id>
 GITHUB_APP_PRIVATE_KEY=<PEM private key>
 GITHUB_APP_WEBHOOK_SECRET=<32+ random characters>
@@ -88,6 +119,22 @@ EMAIL_FROM=Jagalchi <no-reply@mail.jagalchi.justn.me>
 ```
 
 Do not install dummy AI, object-storage, GitHub App, email, OAuth, or IAP credentials while the corresponding feature is disabled. Invalid/missing production flags, non-TLS database settings, synchronization, wildcard/localhost/path origins, or unsafe proxy hops must fail startup.
+
+`GITHUB_PROVIDER`, `JOB_SOURCE_PROVIDER`, and `AI_PROVIDER` may use `fixture` only outside production. `GITHUB_PROVIDER=fixture` permits local evidence execution without live GitHub App secrets; production requires `GITHUB_PROVIDER=github` and the complete live GitHub App credential set.
+
+Workflow timing is fail-closed: `AI_TIMEOUT_MS` must be lower than
+`WORKFLOW_LEASE_MS`, and `WORKFLOW_HEARTBEAT_MS` must be lower than half the
+lease. The API and worker both consume these validated values; polling uses
+`WORKFLOW_POLL_MS`. Retryable failures use bounded exponential backoff between
+`WORKFLOW_RETRY_BASE_MS` and `WORKFLOW_RETRY_MAX_MS`. Readiness rejects a stale
+worker heartbeat after `WORKFLOW_HEALTH_MAX_AGE_MS`; when omitted, the threshold
+is three heartbeat intervals with a 15-second floor. `WORKFLOW_HOLD_AFTER_CLAIM_MS`
+is a development/test-only restart-test hook and production rejects a nonzero value.
+
+Project Run list cursors use descending `(updatedAt, id)` keyset ordering. Pagination
+is weakly consistent: a run updated between page requests may move across the cursor
+and therefore appear again or be skipped. Clients should refresh from the first page
+when they need a current complete view; the cursor does not provide snapshot isolation.
 
 ## Disabled feature contract
 
@@ -170,7 +217,7 @@ Record identifiers and results only. Never record secret values, full database U
 | Supabase plan/limit review and ₩0 confirmation | Free, Seoul Nano, no paid IPv4 add-on accepted |
 | Secret names installed | DB URL/CA, JWT, verification, rate-limit; values excluded |
 | Public API origin / web origin | Cloudtype preview origin / `https://jagalchi.justn.me` |
-| Migration versions/result | 9 migrations; migration command completed before successful Nest startup |
+| Migration versions/result | 10 additive migrations; dedicated migration job completed before API/worker rollout |
 | Baseline/final proxy trust values | `0` insufficient behind ingress; `1` passed changing-XFF threshold proof |
 | Healthz/Recreate/single-runner proof | `/api/health/ready`, Recreate, one running replica |
 | Build/image | observed image `79,529,017` bytes; cached rebuild 8–9 seconds |
