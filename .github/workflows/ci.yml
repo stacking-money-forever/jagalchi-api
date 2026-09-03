@@ -18,6 +18,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
+      - name: Check out the AI contract consumer
+        uses: actions/checkout@v6
+        with:
+          repository: stacking-money-forever/jagalchi-ai
+          ref: main
+          path: _contract-consumer/jagalchi-ai
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
         with:
           version: 10.33.2
@@ -26,7 +33,13 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Verify generated and consumed AI contracts
+        run: |
+          pnpm contracts:check
+          node tools/check-ai-consumer-contract.mjs contracts/ai/v1 _contract-consumer/jagalchi-ai/contracts/ai/v1-generated
+          node tools/check-legacy-ai-consumer-contract.mjs _contract-consumer/jagalchi-ai/contracts/ai/legacy-jobs.compatibility.json
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm openapi:check
       - run: docker build -t jagalchi-api:ci .
