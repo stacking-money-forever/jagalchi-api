@@ -34,11 +34,13 @@ const productionEnvironment = (): Record<string, string> => ({
   OAUTH_APPLE_ENABLED: "false",
   IAP_ENABLED: "false",
   EMAIL_ENABLED: "true",
+  PROJECT_RUNS_ENABLED: "false",
 });
 
 const fullProductionEnvironment = (): Record<string, string> => ({
   ...productionEnvironment(),
   AI_FEATURES_ENABLED: "true",
+  AI_PROVIDER: "deepseek",
   AI_SERVICE_URL: "https://ai.example.com",
   AI_AUTH_JWT_SECRET: "d".repeat(32),
   UPLOADS_ENABLED: "true",
@@ -47,7 +49,9 @@ const fullProductionEnvironment = (): Record<string, string> => ({
   OBJECT_STORAGE_ACCESS_KEY_ID: "key",
   OBJECT_STORAGE_SECRET_ACCESS_KEY: "secret",
   OBJECT_STORAGE_PUBLIC_BASE_URL: "https://cdn.example.com",
+  OBJECT_STORAGE_PRESIGN_ENDPOINT: "https://storage.example.com",
   EVIDENCE_EXECUTION_ENABLED: "true",
+  GITHUB_PROVIDER: "github",
   GITHUB_APP_ID: "123456",
   GITHUB_APP_PRIVATE_KEY: githubPrivateKey,
   GITHUB_APP_WEBHOOK_SECRET: "e".repeat(32),
@@ -86,6 +90,27 @@ describe("validateEnvironment", () => {
     expect(validateEnvironment(environment)).toBe(environment);
   });
 
+  it('allows fixture providers without live GitHub secrets outside production', () => {
+    const environment = {
+      ...productionEnvironment(),
+      NODE_ENV: 'development',
+      EVIDENCE_EXECUTION_ENABLED: 'true',
+      GITHUB_PROVIDER: 'fixture',
+      JOB_SOURCE_PROVIDER: 'fixture',
+      AI_PROVIDER: 'deepseek',
+    };
+    expect(validateEnvironment(environment)).toBe(environment);
+  });
+
+  it.each(['GITHUB_PROVIDER', 'JOB_SOURCE_PROVIDER', 'AI_PROVIDER'])(
+    'rejects fixture mode for %s in production',
+    (key) => {
+      const environment = productionEnvironment();
+      environment[key] = 'fixture';
+      expect(() => validateEnvironment(environment)).toThrow(`${key}=fixture is not allowed in production`);
+    },
+  );
+
   it.each([
     "AI_FEATURES_ENABLED",
     "UPLOADS_ENABLED",
@@ -94,6 +119,7 @@ describe("validateEnvironment", () => {
     "OAUTH_ENABLED",
     "OAUTH_APPLE_ENABLED",
     "IAP_ENABLED",
+    "PROJECT_RUNS_ENABLED",
   ])("requires explicit production flag %s", (key) => {
     const environment = productionEnvironment();
     delete environment[key];
@@ -159,6 +185,7 @@ describe("validateEnvironment", () => {
     const environment = {
       ...productionEnvironment(),
       AI_FEATURES_ENABLED: "true",
+      AI_PROVIDER: "deepseek",
     };
     expect(() => validateEnvironment(environment)).toThrow(
       "AI_SERVICE_URL is required",
@@ -168,6 +195,33 @@ describe("validateEnvironment", () => {
       AI_AUTH_JWT_SECRET: "d".repeat(32),
     });
     expect(validateEnvironment(environment)).toBe(environment);
+  });
+
+  it('accepts the production 65s AI / 120s lease timing budget', () => {
+    const environment = productionEnvironment();
+    Object.assign(environment, {
+      AI_TIMEOUT_MS: '65000', WORKFLOW_LEASE_MS: '120000',
+      WORKFLOW_HEARTBEAT_MS: '30000', WORKFLOW_POLL_MS: '1000',
+    });
+    expect(validateEnvironment(environment)).toBe(environment);
+  });
+
+  it('rejects an AI timeout that can outlive its workflow lease', () => {
+    expect(() => validateEnvironment({
+      ...productionEnvironment(), AI_TIMEOUT_MS: '90000', WORKFLOW_LEASE_MS: '80000',
+    })).toThrow('AI_TIMEOUT_MS must be less than WORKFLOW_LEASE_MS');
+  });
+
+  it('rejects a heartbeat cadence that cannot safely renew the lease', () => {
+    expect(() => validateEnvironment({
+      ...productionEnvironment(), WORKFLOW_LEASE_MS: '120000', WORKFLOW_HEARTBEAT_MS: '60000',
+    })).toThrow('WORKFLOW_HEARTBEAT_MS must be less than half of WORKFLOW_LEASE_MS');
+  });
+
+  it('rejects the deterministic hold-after-claim hook in production', () => {
+    expect(() => validateEnvironment({
+      ...productionEnvironment(), WORKFLOW_HOLD_AFTER_CLAIM_MS: '1',
+    })).toThrow('WORKFLOW_HOLD_AFTER_CLAIM_MS is not allowed in production');
   });
 
   it("requires storage credentials only when uploads are enabled", () => {
@@ -181,7 +235,48 @@ describe("validateEnvironment", () => {
       OBJECT_STORAGE_ACCESS_KEY_ID: "key",
       OBJECT_STORAGE_SECRET_ACCESS_KEY: "secret",
       OBJECT_STORAGE_PUBLIC_BASE_URL: "https://cdn.example.com",
+      OBJECT_STORAGE_PRESIGN_ENDPOINT: "https://storage.example.com",
     });
+    expect(validateEnvironment(environment)).toBe(environment);
+  });
+
+  it('allows loopback HTTP browser storage endpoints only outside production', () => {
+    const development = {
+      ...productionEnvironment(), NODE_ENV: 'development', UPLOADS_ENABLED: 'true',
+      OBJECT_STORAGE_BUCKET: 'uploads', OBJECT_STORAGE_REGION: 'us-east-1',
+      OBJECT_STORAGE_ACCESS_KEY_ID: 'key', OBJECT_STORAGE_SECRET_ACCESS_KEY: 'secret',
+      OBJECT_STORAGE_PUBLIC_BASE_URL: 'http://127.0.0.1:9000/public/',
+      OBJECT_STORAGE_PRESIGN_ENDPOINT: 'http://localhost:9000',
+    };
+    expect(validateEnvironment(development)).toBe(development);
+    expect(() => validateEnvironment({
+      ...development, OBJECT_STORAGE_PRESIGN_ENDPOINT: 'http://minio:9000',
+    })).toThrow('OBJECT_STORAGE_PRESIGN_ENDPOINT');
+    expect(() => validateEnvironment({
+      ...development, OBJECT_STORAGE_PUBLIC_BASE_URL: 'http://storage.internal/public/',
+    })).toThrow('OBJECT_STORAGE_PUBLIC_BASE_URL');
+    expect(() => validateEnvironment({
+      ...development, NODE_ENV: 'production',
+      OBJECT_STORAGE_PUBLIC_BASE_URL: 'https://cdn.example.com/public/',
+      OBJECT_STORAGE_PRESIGN_ENDPOINT: 'http://127.0.0.1:9000',
+    })).toThrow('OBJECT_STORAGE_PRESIGN_ENDPOINT');
+  });
+
+  it('accepts the Phase 1 local-real-source provider matrix', () => {
+    const environment = {
+      ...fullProductionEnvironment(), NODE_ENV: 'development',
+      JAGALCHI_LOCAL_MODE: 'local-real-source', JOB_SOURCE_PROVIDER: 'live',
+      GITHUB_PROVIDER: 'fixture', AI_PROVIDER: 'deepseek',
+    };
+    expect(validateEnvironment(environment)).toBe(environment);
+  });
+
+  it('accepts real source capture with deterministic AI and GitHub', () => {
+    const environment = {
+      ...fullProductionEnvironment(), NODE_ENV: 'development',
+      JAGALCHI_LOCAL_MODE: 'ci-real-source', JOB_SOURCE_PROVIDER: 'live',
+      GITHUB_PROVIDER: 'fixture', AI_PROVIDER: 'fixture',
+    };
     expect(validateEnvironment(environment)).toBe(environment);
   });
 
