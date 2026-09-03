@@ -10,5 +10,6 @@ import { AiTokenService } from './ai-token.service';
   imports: [AuthModule, JwtModule.register({}), TicketsModule],
   controllers: [AiController],
   providers: [AiJobsService, AiTokenService],
+  exports: [AiTokenService],
 })
 export class AiModule {}

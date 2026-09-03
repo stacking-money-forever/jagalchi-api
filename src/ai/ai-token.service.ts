@@ -25,4 +25,14 @@ export class AiTokenService {
       },
     );
   }
+
+  issueInternal(userId: string, permission: 'EXTRACT' | 'INTERPRET' | 'PROPOSE' | 'COMPILE'): string {
+    return this.jwt.sign(
+      { permissions: [permission] },
+      {
+        subject: userId, issuer: 'jagalchi-api', audience: 'jagalchi-ai', algorithm: 'HS256',
+        expiresIn: '2m', secret: this.config.getOrThrow<string>('AI_AUTH_JWT_SECRET'),
+      },
+    );
+  }
 }

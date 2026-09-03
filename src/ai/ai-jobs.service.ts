@@ -8,16 +8,8 @@ import { ConfigService } from '@nestjs/config';
 import type { AiFeature } from '../tickets/ticket-policy';
 import { TicketsService } from '../tickets/tickets.service';
 import { AiTokenService } from './ai-token.service';
-
-const FEATURE_ENDPOINTS: Record<AiFeature, string> = {
-  coaching: '/ai/learning-coach',
-  node_explanation: '/ai/node-description',
-  resource_recommendation: '/ai/resource-recommendation',
-  deep_search: '/ai/graph-rag',
-  feedback: '/ai/record-coach',
-  roadmap_generation: '/ai/roadmap-generated',
-  document_conversion: '/ai/document-roadmap',
-};
+import { LEGACY_AI_JOB_CONTRACTS } from './legacy-ai-job-contract';
+import { validateLegacyAiSchema } from './legacy-ai-schema-validator';
 
 function stringValue(
   payload: Record<string, unknown>,
@@ -62,7 +54,7 @@ function compact(values: Record<string, unknown>): Record<string, unknown> {
   );
 }
 
-function normalizePayload(
+export function normalizeLegacyAiJobPayload(
   feature: AiFeature,
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -142,7 +134,17 @@ export class AiJobsService {
         message: 'AI features are unavailable',
       });
     }
-    const safePayload = normalizePayload(feature, payload);
+    const contract = LEGACY_AI_JOB_CONTRACTS[feature];
+    const safePayload = normalizeLegacyAiJobPayload(feature, payload);
+    const requestValidation = validateLegacyAiSchema(
+      contract.request as unknown as Record<string, unknown>,
+      safePayload,
+    );
+    if (!requestValidation.valid) {
+      throw new BadRequestException(
+        `AI payload violates the legacy compatibility contract at ${requestValidation.path ?? '$'}`,
+      );
+    }
     const reservation = await this.tickets.reserveAiUsage(
       userId,
       feature,
@@ -152,8 +154,8 @@ export class AiJobsService {
     let result: unknown;
     try {
       const baseUrl = new URL(this.config.getOrThrow<string>('AI_SERVICE_URL'));
-      const url = new URL(FEATURE_ENDPOINTS[feature], baseUrl);
-      const usesJsonBody = feature === 'document_conversion';
+      const url = new URL(contract.path, baseUrl);
+      const usesJsonBody = contract.method === 'POST';
       if (!usesJsonBody) {
         for (const [key, value] of Object.entries(safePayload)) {
           if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -181,6 +183,15 @@ export class AiJobsService {
         throw new Error(`AI service returned ${response.status}`);
       }
       result = (await response.json()) as unknown;
+      const responseValidation = validateLegacyAiSchema(
+        contract.response as unknown as Record<string, unknown>,
+        result,
+      );
+      if (!responseValidation.valid) {
+        throw new Error(
+          `AI response violates the legacy compatibility contract at ${responseValidation.path ?? '$'}`,
+        );
+      }
     } catch (error) {
       await this.tickets.refundAiUsage(reservation.id);
       throw new BadGatewayException({

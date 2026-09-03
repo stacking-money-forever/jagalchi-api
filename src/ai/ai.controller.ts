@@ -1,5 +1,5 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiTags } from '@nestjs/swagger';
 import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -14,6 +14,7 @@ export class AiController {
   constructor(private readonly jobs: AiJobsService) {}
 
   @Post('jobs')
+  @ApiBody({ type: RunAiJobDto })
   run(@CurrentUser() user: AuthUser, @Body() dto: RunAiJobDto) {
     return this.jobs.run(
       user.id,
