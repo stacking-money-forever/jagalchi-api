@@ -28,6 +28,7 @@ import {
 } from '../auth/auth.entities';
 import { CreateAuthDomain1770000003000 } from './migrations/1770000003000-create-auth-domain';
 import { RoadmapEvent, RoadmapSequence } from '../realtime/roadmap-event.entity';
+import { RealtimeConnectionTicket } from '../realtime/realtime-ticket.entity';
 import { CreateRealtimeDomain1770000004000 } from './migrations/1770000004000-create-realtime-domain';
 import { UploadAsset } from '../uploads/upload-asset.entity';
 import { CreateUploadsDomain1770000005000 } from './migrations/1770000005000-create-uploads-domain';
@@ -51,6 +52,20 @@ import {
   GithubWebhookDelivery,
 } from '../github/github.entities';
 import { CreateEvidenceExecution1770000008000 } from './migrations/1770000008000-create-evidence-execution';
+import { CreateWorkflowOperations1770000009000 } from './migrations/1770000009000-create-workflow-operations';
+import { WorkflowOperation, WorkflowOperationResult, WorkflowWorkerHeartbeat } from '../workflow-operations/workflow-operation.entities';
+import { ProjectRun } from '../project-runs/project-run.entity';
+import { ProjectRunEntitlement } from '../project-runs/project-run-entitlement.entity';
+import { CompleteWorkflowDurability1770000010000 } from './migrations/1770000010000-complete-workflow-durability';
+import { CreateProductSpine1770000011000 } from './migrations/1770000011000-create-product-spine';
+import { CreateCareerTargetVersions1770000012000 } from './migrations/1770000012000-create-career-target-versions';
+import { CreateInvalidationWatermarks1770000013000 } from './migrations/1770000013000-create-invalidation-watermarks';
+import { SeedProjectBlueprintCatalog1770000014000 } from './migrations/1770000014000-seed-project-blueprint-catalog';
+import {
+  CandidateProfileSnapshot, CareerDiffSnapshot, CareerTargetVersion, ProjectBlueprintVersion, ProjectFeatureEntitlement,
+  ProjectPlanSnapshot, ProjectProposal, ProjectProposalSet, ProjectRepositoryBinding, ProjectRunCommand,
+  ProjectTask, ProofPublication, ProofSnapshot, ProviderInvalidationEvent, RepositoryInvalidationWatermark,
+} from '../project-runs/product-spine.entities';
 import { postgresExtra, postgresSsl } from './postgres-options';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -81,6 +96,7 @@ export const AppDataSource = new DataSource({
     EmailVerificationChallenge,
     RoadmapEvent,
     RoadmapSequence,
+    RealtimeConnectionTicket,
     UploadAsset,
     CareerTarget,
     CareerEvidence,
@@ -95,6 +111,26 @@ export const AppDataSource = new DataSource({
     GithubInstallation,
     GithubInstallationRepository,
     GithubWebhookDelivery,
+    WorkflowOperation,
+    WorkflowOperationResult,
+    ProjectRun,
+    ProjectRunEntitlement,
+    WorkflowWorkerHeartbeat,
+    CandidateProfileSnapshot,
+    CareerTargetVersion,
+    CareerDiffSnapshot,
+    ProjectBlueprintVersion,
+    ProjectFeatureEntitlement,
+    ProjectPlanSnapshot,
+    ProjectProposal,
+    ProjectProposalSet,
+    ProjectRepositoryBinding,
+    ProjectRunCommand,
+    ProjectTask,
+    ProofPublication,
+    ProofSnapshot,
+    ProviderInvalidationEvent,
+    RepositoryInvalidationWatermark,
   ],
   migrations: [
     CreateTicketLedger1770000000000,
@@ -106,6 +142,12 @@ export const AppDataSource = new DataSource({
     CreateTicketPurchases1770000006000,
     CreateCareerDomain1770000007000,
     CreateEvidenceExecution1770000008000,
+    CreateWorkflowOperations1770000009000,
+    CompleteWorkflowDurability1770000010000,
+    CreateProductSpine1770000011000,
+    CreateCareerTargetVersions1770000012000,
+    CreateInvalidationWatermarks1770000013000,
+    SeedProjectBlueprintCatalog1770000014000,
   ],
   migrationsTableName: 'jagalchi_migrations',
   ssl: postgresSsl(process.env.DATABASE_SSL === 'true', process.env.DATABASE_SSL_CA),

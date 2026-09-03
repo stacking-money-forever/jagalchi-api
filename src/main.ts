@@ -2,11 +2,12 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 import * as express from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { parseExactOrigins } from './shared/config/environment';
+import { createJagalchiOpenApi } from './contracts/openapi';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -48,15 +49,7 @@ async function bootstrap(): Promise<void> {
   );
   app.enableShutdownHooks();
 
-  const document = SwaggerModule.createDocument(
-    app,
-    new DocumentBuilder()
-      .setTitle('Jagalchi API')
-      .setDescription('Jagalchi modular API contract')
-      .setVersion('1.0')
-      .addBearerAuth()
-      .build(),
-  );
+  const document = createJagalchiOpenApi(app);
   SwaggerModule.setup('api/docs', app, document);
 
   await app.listen(config.get<number>('PORT', 8080), '0.0.0.0');

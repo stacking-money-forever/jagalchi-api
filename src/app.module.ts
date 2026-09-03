@@ -17,6 +17,11 @@ import { createRateLimitOptions } from './shared/rate-limit/rate-limit';
 import { SocialModule } from './social/social.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { WorkflowOperationModule } from './workflow-operations/workflow-operation.module';
+import { ProjectRunsModule } from './project-runs/project-runs.module';
+import { ExecutionOrchestrationModule } from './execution-orchestration/execution-orchestration.module';
+import { DevSeedModule } from './database/dev-seed.module';
+import { VerificationModule } from './project-runs/verification.module';
 
 @Module({
   imports: [
@@ -54,6 +59,11 @@ import { UploadsModule } from './uploads/uploads.module';
     UploadsModule,
     GithubModule,
     CareerModule,
+    WorkflowOperationModule,
+    ProjectRunsModule,
+    ExecutionOrchestrationModule,
+    DevSeedModule,
+    VerificationModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

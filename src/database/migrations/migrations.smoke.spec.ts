@@ -10,6 +10,12 @@ import { CreateUploadsDomain1770000005000 } from './1770000005000-create-uploads
 import { CreateTicketPurchases1770000006000 } from './1770000006000-create-ticket-purchases';
 import { CreateCareerDomain1770000007000 } from './1770000007000-create-career-domain';
 import { CreateEvidenceExecution1770000008000 } from './1770000008000-create-evidence-execution';
+import { CreateWorkflowOperations1770000009000 } from './1770000009000-create-workflow-operations';
+import { CompleteWorkflowDurability1770000010000 } from './1770000010000-complete-workflow-durability';
+import { CreateProductSpine1770000011000 } from './1770000011000-create-product-spine';
+import { CreateCareerTargetVersions1770000012000 } from './1770000012000-create-career-target-versions';
+import { CreateInvalidationWatermarks1770000013000 } from './1770000013000-create-invalidation-watermarks';
+import { SeedProjectBlueprintCatalog1770000014000 } from './1770000014000-seed-project-blueprint-catalog';
 
 const baseMigrations: MigrationInterface[] = [
   new CreateTicketLedger1770000000000(),
@@ -22,7 +28,14 @@ const baseMigrations: MigrationInterface[] = [
   new CreateCareerDomain1770000007000(),
 ];
 const evidenceMigration = new CreateEvidenceExecution1770000008000();
-const migrations = [...baseMigrations, evidenceMigration];
+const workflowMigration = new CreateWorkflowOperations1770000009000();
+const durabilityMigration = new CompleteWorkflowDurability1770000010000();
+const productSpineMigration = new CreateProductSpine1770000011000();
+const targetVersionsMigration = new CreateCareerTargetVersions1770000012000();
+const invalidationMigration = new CreateInvalidationWatermarks1770000013000();
+const blueprintCatalogMigration = new SeedProjectBlueprintCatalog1770000014000();
+const migrations = [...baseMigrations, evidenceMigration, workflowMigration, durabilityMigration, productSpineMigration, targetVersionsMigration, invalidationMigration, blueprintCatalogMigration];
+const preProductMigrations = [...baseMigrations, evidenceMigration, workflowMigration, durabilityMigration];
 
 const ids = {
   ownerA: '00000000-0000-4000-8000-000000000001',
@@ -241,6 +254,165 @@ async function assertRelationalMatrix(database: PGlite): Promise<void> {
 }
 
 describe('PostgreSQL migrations', () => {
+  it('adds and reverses the product spine over production-shaped legacy rows without changing them', async () => {
+    const database = new PGlite();
+    const queryRunner = { query: async (sql: string) => database.exec(sql) } as unknown as QueryRunner;
+    for (const migration of preProductMigrations) await migration.up(queryRunner);
+    await database.exec(`
+      INSERT INTO "users" ("id", "email", "name") VALUES ('${ids.ownerA}', 'spine@example.test', 'Spine');
+      INSERT INTO "roadmaps" ("id", "owner_id", "title") VALUES ('90000000-0000-4000-8000-000000000001', '${ids.ownerA}', 'Legacy');
+      INSERT INTO "workflow_operations" ("id", "owner_id", "route", "idempotency_key", "kind", "input_hash", "input")
+      VALUES ('90000000-0000-4000-8000-000000000002', '${ids.ownerA}', '/legacy', 'legacy-key', 'LEGACY', '${'9'.repeat(64)}', '{}');
+      INSERT INTO "project_runs" ("id", "source_operation_id", "owner_id", "state", "projection")
+      VALUES ('90000000-0000-4000-8000-000000000003', '90000000-0000-4000-8000-000000000002', '${ids.ownerA}', 'READY', '{}');
+      INSERT INTO "project_run_entitlements" ("owner_id", "enabled", "reason") VALUES ('${ids.ownerA}', true, 'legacy');
+    `);
+    await productSpineMigration.up(queryRunner);
+    const entitlement = await database.query<{ enabled: boolean }>(`SELECT "enabled" FROM "project_feature_entitlements" WHERE "user_id" = '${ids.ownerA}'`);
+    const run = await database.query<{ roadmap_id: string | null }>(`SELECT "roadmap_id" FROM "project_runs" WHERE "id" = '90000000-0000-4000-8000-000000000003'`);
+    expect(entitlement.rows[0]?.enabled).toBe(true);
+    expect(run.rows[0]?.roadmap_id).toBeNull();
+    await productSpineMigration.down(queryRunner);
+    const legacy = await database.query<{ title: string }>(`SELECT "title" FROM "roadmaps" WHERE "id" = '90000000-0000-4000-8000-000000000001'`);
+    expect(legacy.rows[0]?.title).toBe('Legacy');
+    for (const migration of [...preProductMigrations].reverse()) await migration.down(queryRunner);
+    await database.close();
+  }, 30_000);
+
+  it('reconstructs an existing refresh rotation chain as one family on upgrade', async () => {
+    const database = new PGlite();
+    const queryRunner = { query: async (sql: string) => database.exec(sql) } as unknown as QueryRunner;
+    for (const migration of [...baseMigrations, evidenceMigration]) await migration.up(queryRunner);
+    await database.exec(`
+      INSERT INTO "users" ("id", "email", "name") VALUES ('${ids.ownerA}', 'refresh@example.test', 'Refresh');
+      INSERT INTO "refresh_sessions" ("id", "user_id", "token_hash", "expires_at", "revoked_at", "replaced_by_id") VALUES
+        ('81000000-0000-4000-8000-000000000003', '${ids.ownerA}', '${'3'.repeat(64)}', now() + interval '1 day', null, null),
+        ('81000000-0000-4000-8000-000000000002', '${ids.ownerA}', '${'2'.repeat(64)}', now() + interval '1 day', now(), '81000000-0000-4000-8000-000000000003'),
+        ('81000000-0000-4000-8000-000000000001', '${ids.ownerA}', '${'1'.repeat(64)}', now() + interval '1 day', now(), '81000000-0000-4000-8000-000000000002');
+    `);
+    await workflowMigration.up(queryRunner);
+    const families = await database.query<{ family_id: string }>(`SELECT "family_id" FROM "refresh_sessions" ORDER BY "id"`);
+    expect(new Set(families.rows.map(({ family_id }) => family_id))).toEqual(new Set(['81000000-0000-4000-8000-000000000001']));
+    await database.exec(`
+      INSERT INTO "refresh_sessions" ("user_id", "token_hash", "expires_at")
+      VALUES ('${ids.ownerA}', '${'4'.repeat(64)}', now() + interval '1 day')
+    `);
+    const legacyWrite = await database.query<{ family_id: string | null }>(`
+      SELECT "family_id" FROM "refresh_sessions" WHERE "token_hash" = '${'4'.repeat(64)}'
+    `);
+    expect(legacyWrite.rows[0]?.family_id).toMatch(/^[0-9a-f-]{36}$/i);
+    await workflowMigration.down(queryRunner);
+    for (const migration of [...baseMigrations, evidenceMigration].reverse()) await migration.down(queryRunner);
+    await database.close();
+  }, 30_000);
+
+  it('serializes concurrent family rotation and reuse without leaving a live token', async () => {
+    const database = new PGlite();
+    const queryRunner = { query: async (sql: string) => database.exec(sql) } as unknown as QueryRunner;
+    for (const migration of migrations) await migration.up(queryRunner);
+    const family = '82000000-0000-4000-8000-000000000001';
+    await database.exec(`
+      INSERT INTO "users" ("id", "email", "name") VALUES ('${ids.ownerA}', 'family-race@example.test', 'Race');
+      INSERT INTO "refresh_sessions" ("id", "user_id", "family_id", "token_hash", "expires_at", "revoked_at", "replaced_by_id") VALUES
+        ('${family}', '${ids.ownerA}', '${family}', '${'1'.repeat(64)}', now() + interval '1 day', now(), '82000000-0000-4000-8000-000000000002'),
+        ('82000000-0000-4000-8000-000000000002', '${ids.ownerA}', '${family}', '${'2'.repeat(64)}', now() + interval '1 day', null, null);
+    `);
+    await Promise.all([
+      database.transaction(async (tx) => {
+        await tx.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [family]);
+        await tx.exec(`
+          WITH rotated AS (
+            UPDATE "refresh_sessions" SET "revoked_at" = now(), "replaced_by_id" = '82000000-0000-4000-8000-000000000003'
+            WHERE "id" = '82000000-0000-4000-8000-000000000002' AND "revoked_at" IS NULL RETURNING 1
+          )
+          INSERT INTO "refresh_sessions" ("id", "user_id", "family_id", "token_hash", "expires_at")
+          SELECT '82000000-0000-4000-8000-000000000003', '${ids.ownerA}', '${family}', '${'3'.repeat(64)}', now() + interval '1 day'
+          FROM rotated
+        `);
+      }),
+      database.transaction(async (tx) => {
+        await tx.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [family]);
+        await tx.exec(`UPDATE "refresh_sessions" SET "revoked_at" = now() WHERE "family_id" = '${family}' AND "revoked_at" IS NULL`);
+      }),
+    ]);
+    const active = await database.query<{ count: number }>(`SELECT count(*)::integer AS count FROM "refresh_sessions" WHERE "family_id" = '${family}' AND "revoked_at" IS NULL`);
+    expect(active.rows[0]?.count).toBe(0);
+    for (const migration of [...migrations].reverse()) await migration.down(queryRunner);
+    await database.close();
+  }, 30_000);
+
+  it('enforces scoped operation idempotency and exactly one result without global input dedupe', async () => {
+    const database = new PGlite();
+    const queryRunner = { query: async (sql: string) => database.exec(sql) } as unknown as QueryRunner;
+    for (const migration of migrations) await migration.up(queryRunner);
+    await database.exec(`
+      INSERT INTO "users" ("id", "email", "name")
+      VALUES ('${ids.ownerA}', 'operation-owner@example.test', 'Operation Owner');
+      INSERT INTO "workflow_operations"
+        ("id", "owner_id", "route", "idempotency_key", "kind", "input_hash", "input")
+      VALUES
+        ('70000000-0000-4000-8000-000000000001', '${ids.ownerA}', '/runs', 'key-1', 'PROJECT_RUN', '${'1'.repeat(64)}', '{}'),
+        ('70000000-0000-4000-8000-000000000002', '${ids.ownerA}', '/runs', 'key-2', 'PROJECT_RUN', '${'1'.repeat(64)}', '{}');
+      INSERT INTO "workflow_operation_results" ("operation_id", "value")
+      VALUES ('70000000-0000-4000-8000-000000000001', '{}');
+    `);
+    const durability = await database.query<{
+      max_attempts: number;
+      input_schema_version: number;
+      result_schema_version: number;
+      next_attempt_at: Date;
+    }>(`
+      SELECT "max_attempts", "input_schema_version", "result_schema_version", "next_attempt_at"
+      FROM "workflow_operations"
+      WHERE "id" = '70000000-0000-4000-8000-000000000001'
+    `);
+    expect(durability.rows[0]).toMatchObject({
+      max_attempts: 3,
+      input_schema_version: 1,
+      result_schema_version: 1,
+    });
+    expect(durability.rows[0]?.next_attempt_at).toBeTruthy();
+    await expectConstraint(
+      database,
+      `INSERT INTO "workflow_operations"
+        ("owner_id", "route", "idempotency_key", "kind", "input_hash", "input")
+       VALUES ('${ids.ownerA}', '/runs', 'key-1', 'OTHER', '${'2'.repeat(64)}', '{}')`,
+      'uq_workflow_operations_idempotency',
+    );
+    await expectConstraint(
+      database,
+      `INSERT INTO "workflow_operation_results" ("operation_id", "value")
+       VALUES ('70000000-0000-4000-8000-000000000001', '{}')`,
+      'uq_workflow_operation_results_operation',
+    );
+    for (const migration of [...migrations].reverse()) await migration.down(queryRunner);
+    await database.close();
+  }, 30_000);
+
+  it('makes cancel win atomically and rejects a late worker result after lease loss', async () => {
+    const database = new PGlite();
+    const queryRunner = { query: async (sql: string) => database.exec(sql) } as unknown as QueryRunner;
+    for (const migration of migrations) await migration.up(queryRunner);
+    await database.exec(`
+      INSERT INTO "users" ("id", "email", "name") VALUES ('${ids.ownerA}', 'cancel@example.test', 'Cancel');
+      INSERT INTO "workflow_operations"
+        ("id", "owner_id", "route", "idempotency_key", "kind", "input_hash", "input", "state", "lease_owner", "lease_expires_at")
+      VALUES ('72000000-0000-4000-8000-000000000001', '${ids.ownerA}', '/runs', 'cancel-1', 'PROJECT_PLAN', '${'a'.repeat(64)}', '{}', 'RUNNING', 'worker-a', now() + interval '2 minutes');
+      UPDATE "workflow_operations" SET "state" = 'CANCEL_REQUESTED'
+      WHERE "id" = '72000000-0000-4000-8000-000000000001' AND "state" = 'RUNNING';
+      INSERT INTO "workflow_operation_results" ("operation_id", "value")
+      SELECT "id", '{}' FROM "workflow_operations"
+      WHERE "id" = '72000000-0000-4000-8000-000000000001'
+        AND "state" = 'RUNNING' AND "lease_owner" = 'worker-a';
+    `);
+    const resultCount = await database.query<{ count: number }>(`SELECT count(*)::integer AS count FROM "workflow_operation_results"`);
+    const state = await database.query<{ state: string }>(`SELECT "state" FROM "workflow_operations" WHERE "id" = '72000000-0000-4000-8000-000000000001'`);
+    expect(resultCount.rows[0]?.count).toBe(0);
+    expect(state.rows[0]?.state).toBe('CANCEL_REQUESTED');
+    for (const migration of [...migrations].reverse()) await migration.down(queryRunner);
+    await database.close();
+  }, 30_000);
+
   it('applies and rolls back the complete schema in order', async () => {
     const database = new PGlite();
     const queryRunner = {
@@ -267,6 +439,27 @@ describe('PostgreSQL migrations', () => {
         'proof_reviews',
         'proof_profiles',
         'published_proofs',
+        'workflow_operations',
+        'workflow_operation_results',
+        'workflow_worker_heartbeats',
+        'candidate_profile_snapshots',
+        'career_target_versions',
+        'provider_invalidation_events',
+        'repository_invalidation_watermarks',
+        'career_diff_snapshots',
+        'project_blueprint_versions',
+        'project_proposal_sets',
+        'project_proposals',
+        'project_plan_snapshots',
+        'project_tasks',
+        'project_feature_entitlements',
+        'project_repository_bindings',
+        'proof_snapshots',
+        'proof_publications',
+        'project_run_commands',
+        'realtime_connection_tickets',
+        'project_runs',
+        'project_run_entitlements',
       ]),
     );
     const publicationStates = await database.query<{ enumlabel: string }>(`
@@ -280,6 +473,17 @@ describe('PostgreSQL migrations', () => {
       'ACTIVE',
       'UNPUBLISHED',
       'INVALIDATED',
+    ]);
+    const blueprints = await database.query<{ blueprint_key: string; version: number; catalog_version: string }>(`
+      SELECT blueprint_key, version, catalog_version
+      FROM project_blueprint_versions
+      WHERE blueprint_key LIKE 'blueprint-%'
+      ORDER BY blueprint_key
+    `);
+    expect(blueprints.rows).toEqual([
+      { blueprint_key: 'blueprint-1', version: 1, catalog_version: 'v1' },
+      { blueprint_key: 'blueprint-2', version: 1, catalog_version: 'v1' },
+      { blueprint_key: 'blueprint-3', version: 1, catalog_version: 'v1' },
     ]);
 
     for (const migration of [...migrations].reverse()) await migration.down(queryRunner);
@@ -299,10 +503,12 @@ describe('PostgreSQL migrations', () => {
       } as unknown as QueryRunner;
 
       if (mode === 'fresh') {
-        for (const migration of migrations) await migration.up(queryRunner);
+        for (const migration of preProductMigrations) await migration.up(queryRunner);
       } else {
         for (const migration of baseMigrations) await migration.up(queryRunner);
         await evidenceMigration.up(queryRunner);
+        await workflowMigration.up(queryRunner);
+        await durabilityMigration.up(queryRunner);
       }
       await evidenceMigration.down(queryRunner);
       const circularConstraints = await database.query<{ count: number }>(`
@@ -314,7 +520,7 @@ describe('PostgreSQL migrations', () => {
       await evidenceMigration.up(queryRunner);
       await assertRelationalMatrix(database);
 
-      for (const migration of [...migrations].reverse()) await migration.down(queryRunner);
+      for (const migration of [...preProductMigrations].reverse()) await migration.down(queryRunner);
       await database.close();
     },
     30_000,

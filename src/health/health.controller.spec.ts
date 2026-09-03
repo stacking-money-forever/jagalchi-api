@@ -12,6 +12,18 @@ describe('HealthController', () => {
     expect(dataSource.query).not.toHaveBeenCalled();
   });
 
+  it('requires a recent workflow-worker heartbeat when Project Runs are enabled', async () => {
+    const dataSource = { query: vi.fn().mockResolvedValue([{ '?column?': 1 }]) };
+    const config = { get: (key: string) => key === 'PROJECT_RUNS_ENABLED' ? 'true' : '15000' };
+    const operations = { latestWorkerHeartbeat: vi.fn().mockResolvedValue(new Date()) };
+    await expect(new HealthController(dataSource as never, config as never, operations as never).getReadiness())
+      .resolves.toEqual({ status: 'ready', service: 'jagalchi-api' });
+
+    operations.latestWorkerHeartbeat.mockResolvedValue(new Date(Date.now() - 20_000));
+    await expect(new HealthController(dataSource as never, config as never, operations as never).getReadiness())
+      .rejects.toMatchObject({ response: { code: 'WORKFLOW_WORKER_NOT_READY' } });
+  });
+
   it('returns ready only after a bounded database query succeeds', async () => {
     const dataSource = { query: vi.fn().mockResolvedValue([{ '?column?': 1 }]) };
     await expect(new HealthController(dataSource as never).getReadiness()).resolves.toEqual({
