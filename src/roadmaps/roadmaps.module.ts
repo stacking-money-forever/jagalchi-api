@@ -12,6 +12,7 @@ import {
   RoadmapsController,
 } from './roadmaps.controller';
 import { RoadmapsService } from './roadmaps.service';
+import { ProjectRun } from '../project-runs/project-run.entity';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { RoadmapsService } from './roadmaps.service';
       RoadmapDirectory,
       NodeProgress,
       RoadmapReaction,
+      ProjectRun,
     ]),
   ],
   controllers: [RoadmapsController, DirectoriesController],

@@ -24,6 +24,7 @@ import {
   RoadmapReactionType,
   RoadmapVisibility,
 } from './entities/roadmap.entities';
+import { ProjectRun } from '../project-runs/project-run.entity';
 
 const EMPTY_GRAPH: RoadmapGraph = { schemaVersion: 1, nodes: [], edges: [] };
 
@@ -38,6 +39,7 @@ export class RoadmapsService {
     private readonly progress: Repository<NodeProgress>,
     @InjectRepository(RoadmapReaction)
     private readonly reactions: Repository<RoadmapReaction>,
+    @InjectRepository(ProjectRun) private readonly projectRuns?: Repository<ProjectRun>,
   ) {}
 
   async create(ownerId: string, dto: CreateRoadmapDto): Promise<Roadmap> {
@@ -123,6 +125,7 @@ export class RoadmapsService {
 
   async update(ownerId: string, id: string, dto: UpdateRoadmapDto): Promise<Roadmap> {
     const roadmap = await this.getOwned(ownerId, id);
+    await this.assertNotProjectRunProjection(id);
     if (dto.directoryId) await this.requireDirectory(ownerId, dto.directoryId);
     if (dto.graph) this.assertValidGraph(dto.graph);
 
@@ -137,6 +140,7 @@ export class RoadmapsService {
 
   async remove(ownerId: string, id: string): Promise<void> {
     const roadmap = await this.getOwned(ownerId, id);
+    await this.assertNotProjectRunProjection(id);
     await this.roadmaps.softRemove(roadmap);
   }
 
@@ -380,6 +384,12 @@ export class RoadmapsService {
 
   private normalizeTags(tags: string[]): string[] {
     return [...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))];
+  }
+
+  private async assertNotProjectRunProjection(roadmapId: string): Promise<void> {
+    if (this.projectRuns && await this.projectRuns.exists({ where: { roadmapId } })) {
+      throw new ConflictException({ code: 'PROJECT_RUN_ROADMAP_READ_ONLY', message: 'Project Run Roadmap is read-only' });
+    }
   }
 
   private assertValidGraph(graph: RoadmapGraph): void {

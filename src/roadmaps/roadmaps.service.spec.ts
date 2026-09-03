@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { RoadmapVisibility } from './entities/roadmap.entities';
 import { RoadmapsService } from './roadmaps.service';
@@ -62,5 +62,14 @@ describe('RoadmapsService', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(subject.roadmaps.save).not.toHaveBeenCalled();
+  });
+
+  it('keeps Project Run-linked Roadmaps read-only', async () => {
+    const roadmaps = { findOne: vi.fn().mockResolvedValue({ id: 'roadmap-1', ownerId: 'user-1' }), save: vi.fn() };
+    const projectRuns = { exists: vi.fn().mockResolvedValue(true) };
+    const service = new RoadmapsService({} as never, roadmaps as never, {} as never, {} as never, {} as never, projectRuns as never);
+    await expect(service.update('user-1', 'roadmap-1', { title: 'Changed' })).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.remove('user-1', 'roadmap-1')).rejects.toMatchObject({ response: { code: 'PROJECT_RUN_ROADMAP_READ_ONLY' } });
+    expect(roadmaps.save).not.toHaveBeenCalled();
   });
 });
