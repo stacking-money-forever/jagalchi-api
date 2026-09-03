@@ -894,11 +894,14 @@ export class CareerService {
 
   async getPublicProofProfile(publicId: string): Promise<PublicProofProfileV1Dto> {
     const rows = await this.dataSource.query(
-      `SELECT profile.public_id,
+      `SELECT public_id, display_name, profile_summary, updated_at, snapshot
+         FROM (
+       SELECT profile.public_id,
               profile.display_name,
               profile.summary AS profile_summary,
               profile.updated_at,
-              publication.snapshot
+              publication.snapshot,
+              publication.updated_at AS publication_updated_at
          FROM proof_profiles profile
          JOIN published_proofs publication ON publication.profile_id = profile.id
          JOIN proof_missions mission ON mission.id = publication.mission_id
@@ -927,7 +930,27 @@ export class CareerService {
           AND review.reviewer_id <> mission.owner_user_id
           AND installation.status = 'ACTIVE'
           AND repository.active = true
-        ORDER BY publication.updated_at DESC`,
+        UNION ALL
+       SELECT profile.public_id,
+              profile.display_name,
+              profile.summary AS profile_summary,
+              profile.updated_at,
+              snapshot.payload -> 'publicProjection' AS snapshot,
+              publication.updated_at AS publication_updated_at
+         FROM proof_profiles profile
+         JOIN proof_snapshots snapshot
+           ON snapshot.owner_id = profile.owner_user_id
+          AND snapshot.payload ->> 'publicProfileId' = profile.public_id
+         JOIN proof_publications publication
+           ON publication.proof_snapshot_id = snapshot.id
+          AND publication.project_run_id = snapshot.project_run_id
+        WHERE profile.public_id = $1
+          AND profile.state = 'ENABLED'
+          AND publication.publication_status = 'PUBLISHED'
+          AND publication.validity = 'ACTIVE'
+          AND snapshot.payload -> 'publicProjection' IS NOT NULL
+        ) public_proofs
+        ORDER BY publication_updated_at DESC`,
       [publicId, new Date()],
     ) as unknown[];
     return this.projectPublicProofProfile(rows);

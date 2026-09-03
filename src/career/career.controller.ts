@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiParam, ApiTags } from '@nestjs/swagger';
 import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -259,6 +259,7 @@ export class CareerController {
   }
 
   @Get('proof-profiles/:publicId')
+  @ApiParam({ name: 'publicId', schema: { type: 'string', minLength: 22, maxLength: 27, pattern: '^[A-Za-z0-9_-]+$' } })
   @Header('Cache-Control', 'private, no-store, max-age=0')
   @Header('X-Robots-Tag', 'noindex, nofollow')
   getPublicProofProfile(@Param('publicId') publicId: string) {
