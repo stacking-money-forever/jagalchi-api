@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jagalchi.dev/schemas/ai/v1/candidate-evidence-interpret.response.schema.json",
+  "title": "Jagalchi AI v1 candidate-evidence-interpret.response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "operationId",
+    "kind",
+    "result",
+    "citations",
+    "receipt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "operationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "kind": {
+      "const": "candidate_evidence_interpret"
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "findings",
+        "gaps"
+      ],
+      "properties": {
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "statement",
+              "confidence",
+              "citationIds"
+            ],
+            "properties": {
+              "statement": {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "citationIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "minLength": 1
+                },
+                "maxItems": 20,
+                "minItems": 1
+              }
+            }
+          },
+          "maxItems": 50
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1
+          },
+          "maxItems": 30
+        }
+      }
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "url",
+          "quote"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "format": "uri"
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1
+          }
+        }
+      },
+      "maxItems": 100
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "model",
+        "providerRequestId",
+        "promptVersion",
+        "inputHash",
+        "generatedAt",
+        "durationMs",
+        "timeoutBudgetSeconds"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "maxLength": 80,
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 160,
+          "minLength": 1
+        },
+        "providerRequestId": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "promptVersion": {
+          "type": "string",
+          "maxLength": 80,
+          "minLength": 1
+        },
+        "inputHash": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timeoutBudgetSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "usage": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "endpoints": {
+    "jobPostingExtract": "/ai/internal/v1/job-posting-extract",
+    "candidateEvidenceInterpret": "/ai/internal/v1/candidate-evidence-interpret",
+    "projectProposals": "/ai/internal/v1/project-proposals",
+    "projectPlan": "/ai/internal/v1/project-plan"
+  },
+  "files": {
+    "candidate-evidence-interpret.request.schema.json": "d4db79c9a8a8b8838692c1a20fc2c4c586aea8865daa40847bac8095b6625698",
+    "candidate-evidence-interpret.response.schema.json": "697105d980144964e5bdd0792692cd0f45b98c3ec0968b564d61abd7ed5cfd35",
+    "job-posting-extract.request.schema.json": "a8cbb5bf6eb79339b4f55e76b1d32fdf9fdf5baaf1cbedcdfd10c37a3490c2fe",
+    "job-posting-extract.response.schema.json": "f61dd3481f1d6cb5d7920e1ca623fb41dac53c4c9d054ed9e8c832d728f9989d",
+    "project-plan.request.schema.json": "2389ff63e265fd6cc654fcd09e2fbe384933f94e511e97f4a4b6870036550d6c",
+    "project-plan.response.schema.json": "fc7b107fa4ff994891838fd87d5ef20576193b316b132c923f0f5bdb6703fb40",
+    "project-proposals.request.schema.json": "baade43971ca42251eea7dcde3dd3c02393634b3eda3b91904cd0cf0630944b4",
+    "project-proposals.response.schema.json": "815a92c010769c32f30604b37549ef2c55fec22715666834f313e15ad91e0fb2"
+  },
+  "bundleSha256": "1a632fe506f9828189e2f5c8af672e32dbb0b063b8b2c5f8d00c5d8ce4261c77"
+}

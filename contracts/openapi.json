@@ -1,0 +1,5145 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/ai/jobs": {
+      "post": {
+        "operationId": "AiController_run",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunAiJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/users": {
+      "post": {
+        "operationId": "UsersController_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebRegistrationResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      },
+      "get": {
+        "operationId": "UsersController_getProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      },
+      "delete": {
+        "operationId": "UsersController_deleteAccount",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/users/search": {
+      "get": {
+        "operationId": "UsersController_searchUsers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/users/profile": {
+      "patch": {
+        "operationId": "UsersController_updateProfile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/users/verification": {
+      "post": {
+        "operationId": "UsersController_sendVerification",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendEmailVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "UsersController_verifyEmail",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/users/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebAuthResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/native/register": {
+      "post": {
+        "operationId": "AuthController_nativeRegister",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeAuthResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/native/login": {
+      "post": {
+        "operationId": "AuthController_nativeLogin",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeAuthResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/native/refresh": {
+      "patch": {
+        "operationId": "AuthController_nativeRefresh",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeRefreshDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeAuthResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/native/logout": {
+      "post": {
+        "operationId": "AuthController_nativeLogout",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeLogoutDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/password-reset": {
+      "post": {
+        "operationId": "AuthController_sendPasswordReset",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendEmailVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      },
+      "patch": {
+        "operationId": "AuthController_resetPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/password-reset/verify": {
+      "patch": {
+        "operationId": "AuthController_verifyPasswordReset",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/refresh": {
+      "patch": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebAuthResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/login/{provider}": {
+      "get": {
+        "operationId": "AuthController_startOAuth",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/callback/{provider}": {
+      "get": {
+        "operationId": "AuthController_oauthCallback",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/callback/apple": {
+      "post": {
+        "operationId": "AuthController_appleCallback",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthCallbackQueryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/oauth/exchange": {
+      "post": {
+        "operationId": "AuthController_exchangeOAuth",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthExchangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebAuthResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/auth/native/oauth/exchange": {
+      "post": {
+        "operationId": "AuthController_nativeExchangeOAuth",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthExchangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeAuthResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/career/competencies": {
+      "get": {
+        "operationId": "CareerController_listCompetencies",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/targets": {
+      "get": {
+        "operationId": "CareerController_listTargets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      },
+      "post": {
+        "operationId": "CareerController_createTarget",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCareerTargetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/targets/{id}/diff": {
+      "get": {
+        "operationId": "CareerController_getDiff",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/evidence": {
+      "get": {
+        "operationId": "CareerController_listEvidence",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      },
+      "post": {
+        "operationId": "CareerController_createEvidence",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCareerEvidenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/reviews": {
+      "get": {
+        "operationId": "CareerController_listReviewQueue",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/evidence/{id}/review": {
+      "patch": {
+        "operationId": "CareerController_reviewEvidence",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCareerEvidenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-missions": {
+      "get": {
+        "operationId": "CareerController_listMissions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      },
+      "post": {
+        "operationId": "CareerController_createMission",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProofMissionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-missions/{missionId}": {
+      "get": {
+        "operationId": "CareerController_getMission",
+        "parameters": [
+          {
+            "name": "missionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-missions/{missionId}/criteria": {
+      "put": {
+        "operationId": "CareerController_replaceCriteria",
+        "parameters": [
+          {
+            "name": "missionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceProofCriteriaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-missions/{missionId}/bind": {
+      "post": {
+        "operationId": "CareerController_bindPullRequest",
+        "parameters": [
+          {
+            "name": "missionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindProofPullRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-missions/{missionId}/refresh": {
+      "post": {
+        "operationId": "CareerController_refreshVerification",
+        "parameters": [
+          {
+            "name": "missionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdempotentCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-missions/{missionId}/submit": {
+      "post": {
+        "operationId": "CareerController_submitForReview",
+        "parameters": [
+          {
+            "name": "missionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdempotentCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-missions/{missionId}/review": {
+      "post": {
+        "operationId": "CareerController_reviewMission",
+        "parameters": [
+          {
+            "name": "missionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewProofMissionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-missions/{missionId}/archive": {
+      "post": {
+        "operationId": "CareerController_archiveMission",
+        "parameters": [
+          {
+            "name": "missionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdempotentCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-reviews": {
+      "get": {
+        "operationId": "CareerController_listProofReviewQueue",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-profile": {
+      "get": {
+        "operationId": "CareerController_getProofProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      },
+      "put": {
+        "operationId": "CareerController_updateProofProfile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProofProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-profile/publish/{missionId}": {
+      "post": {
+        "operationId": "CareerController_publishProof",
+        "parameters": [
+          {
+            "name": "missionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishProofDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-profile/renew/{missionId}": {
+      "post": {
+        "operationId": "CareerController_renewPublicationLease",
+        "parameters": [
+          {
+            "name": "missionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdempotentCommandDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-profile/unpublish/{missionId}": {
+      "post": {
+        "operationId": "CareerController_unpublishProof",
+        "parameters": [
+          {
+            "name": "missionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnpublishProofDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/career/proof-profiles/{publicId}": {
+      "get": {
+        "operationId": "CareerController_getPublicProofProfile",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 22,
+              "maxLength": 27,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "career"
+        ]
+      }
+    },
+    "/api/github/webhooks": {
+      "post": {
+        "operationId": "GithubWebhookController_receive",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "GithubWebhook"
+        ]
+      }
+    },
+    "/api/github/setup": {
+      "get": {
+        "operationId": "GithubController_getSetup",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "github"
+        ]
+      }
+    },
+    "/api/github/installation-claims": {
+      "post": {
+        "operationId": "GithubController_installationClaim",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GithubInstallationClaimDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "github"
+        ]
+      }
+    },
+    "/api/github/repositories": {
+      "get": {
+        "operationId": "GithubController_listRepositories",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "github"
+        ]
+      }
+    },
+    "/api/github/repositories/{repositoryId}/pulls": {
+      "get": {
+        "operationId": "GithubController_listPullRequests",
+        "parameters": [
+          {
+            "name": "repositoryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "github"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "HealthController_getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/health/ready": {
+      "get": {
+        "operationId": "HealthController_getReadiness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/project-runs": {
+      "get": {
+        "operationId": "ProjectRunsController_listProjectRuns",
+        "parameters": [
+          {
+            "name": "state",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/project-runs/{id}": {
+      "get": {
+        "operationId": "ProjectRunsController_getProjectRun",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRunProjectionDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/project-runs/{id}/tasks/{taskId}/start": {
+      "post": {
+        "operationId": "ProjectRunsController_start",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "if-match",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/project-runs/{id}/tasks/{taskId}/defer": {
+      "post": {
+        "operationId": "ProjectRunsController_defer",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "if-match",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/project-runs/{id}/tasks/{taskId}/block": {
+      "post": {
+        "operationId": "ProjectRunsController_block",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "if-match",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/project-runs/{id}/tasks/{taskId}/resume": {
+      "post": {
+        "operationId": "ProjectRunsController_resume",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "if-match",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/project-runs/{id}/tasks/{taskId}/verify": {
+      "post": {
+        "operationId": "ProjectRunsController_verify",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "if-match",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/project-runs/{id}/archive": {
+      "post": {
+        "operationId": "ProjectRunsController_archive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "if-match",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/project-runs/{id}/reverify": {
+      "post": {
+        "operationId": "ProjectRunsController_reverify",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "if-match",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/project-runs/{id}/publish": {
+      "post": {
+        "operationId": "ProjectRunsController_publish",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "if-match",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/project-runs/{id}/unpublish": {
+      "post": {
+        "operationId": "ProjectRunsController_unpublish",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "if-match",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/roadmaps/{roadmapId}/events": {
+      "get": {
+        "operationId": "RealtimeController_readSince",
+        "parameters": [
+          {
+            "name": "roadmapId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmap events"
+        ]
+      }
+    },
+    "/api/realtime/tickets": {
+      "post": {
+        "operationId": "RealtimeTicketController_issue",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeTicketResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "realtime"
+        ]
+      }
+    },
+    "/api/directories/tree": {
+      "get": {
+        "operationId": "DirectoriesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "directories"
+        ]
+      }
+    },
+    "/api/directories": {
+      "post": {
+        "operationId": "DirectoriesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDirectoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "directories"
+        ]
+      }
+    },
+    "/api/directories/{id}/parent": {
+      "patch": {
+        "operationId": "DirectoriesController_move",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveDirectoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "directories"
+        ]
+      }
+    },
+    "/api/directories/{id}": {
+      "patch": {
+        "operationId": "DirectoriesController_rename",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameDirectoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "directories"
+        ]
+      },
+      "delete": {
+        "operationId": "DirectoriesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "directories"
+        ]
+      }
+    },
+    "/api/roadmaps/public": {
+      "get": {
+        "operationId": "RoadmapsController_listPublic",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "roadmaps"
+        ]
+      }
+    },
+    "/api/roadmaps/public/{id}": {
+      "get": {
+        "operationId": "RoadmapsController_getPublic",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "roadmaps"
+        ]
+      }
+    },
+    "/api/roadmaps/mine": {
+      "get": {
+        "operationId": "RoadmapsController_listMine",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmaps"
+        ]
+      }
+    },
+    "/api/roadmaps": {
+      "post": {
+        "operationId": "RoadmapsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoadmapDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmaps"
+        ]
+      }
+    },
+    "/api/roadmaps/{id}": {
+      "get": {
+        "operationId": "RoadmapsController_getOwned",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmaps"
+        ]
+      },
+      "patch": {
+        "operationId": "RoadmapsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRoadmapDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmaps"
+        ]
+      },
+      "delete": {
+        "operationId": "RoadmapsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmaps"
+        ]
+      }
+    },
+    "/api/roadmaps/{id}/fork": {
+      "post": {
+        "operationId": "RoadmapsController_fork",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmaps"
+        ]
+      }
+    },
+    "/api/roadmaps/public/{id}/fork-tree": {
+      "get": {
+        "operationId": "RoadmapsController_getForkTree",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "roadmaps"
+        ]
+      }
+    },
+    "/api/roadmaps/{id}/fork-status": {
+      "get": {
+        "operationId": "RoadmapsController_getForkStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmaps"
+        ]
+      }
+    },
+    "/api/roadmaps/{id}/reactions/{type}": {
+      "put": {
+        "operationId": "RoadmapsController_addReaction",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmaps"
+        ]
+      },
+      "delete": {
+        "operationId": "RoadmapsController_removeReaction",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmaps"
+        ]
+      }
+    },
+    "/api/roadmaps/{id}/nodes/{nodeId}/progress": {
+      "put": {
+        "operationId": "RoadmapsController_completeNode",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nodeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteNodeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmaps"
+        ]
+      }
+    },
+    "/api/roadmaps/{id}/progress": {
+      "get": {
+        "operationId": "RoadmapsController_getProgress",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "roadmaps"
+        ]
+      }
+    },
+    "/api/roadmaps/public/{roadmapId}/comments": {
+      "get": {
+        "operationId": "SocialController_listComments",
+        "parameters": [
+          {
+            "name": "roadmapId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/roadmaps/{roadmapId}/comments": {
+      "post": {
+        "operationId": "SocialController_createComment",
+        "parameters": [
+          {
+            "name": "roadmapId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/comments/{id}": {
+      "patch": {
+        "operationId": "SocialController_updateComment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCommentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "social"
+        ]
+      },
+      "delete": {
+        "operationId": "SocialController_deleteComment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/users/{id}/follow": {
+      "put": {
+        "operationId": "SocialController_follow",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "social"
+        ]
+      },
+      "delete": {
+        "operationId": "SocialController_unfollow",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/users/{id}/followers": {
+      "get": {
+        "operationId": "SocialController_listFollowers",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/users/{id}/following": {
+      "get": {
+        "operationId": "SocialController_listFollowing",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "operationId": "SocialController_listNotifications",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/notifications/{id}/read": {
+      "patch": {
+        "operationId": "SocialController_markRead",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/notifications/read-all": {
+      "patch": {
+        "operationId": "SocialController_markAllRead",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/notifications/preferences": {
+      "get": {
+        "operationId": "SocialController_getPreferences",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "social"
+        ]
+      },
+      "put": {
+        "operationId": "SocialController_updatePreferences",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationPreferencesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/api/tickets/account": {
+      "post": {
+        "operationId": "TicketsController_openAccount",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "tickets"
+        ]
+      }
+    },
+    "/api/tickets/balance": {
+      "get": {
+        "operationId": "TicketsController_getBalance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "tickets"
+        ]
+      }
+    },
+    "/api/tickets/ledger": {
+      "get": {
+        "operationId": "TicketsController_getLedger",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "tickets"
+        ]
+      }
+    },
+    "/api/tickets/packs": {
+      "get": {
+        "operationId": "TicketsController_getPacks",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "tickets"
+        ]
+      }
+    },
+    "/api/tickets/purchases/context": {
+      "get": {
+        "operationId": "TicketsController_getPurchaseContext",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "tickets"
+        ]
+      }
+    },
+    "/api/tickets/purchases/fulfill": {
+      "post": {
+        "operationId": "TicketsController_fulfillPurchase",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FulfillTicketPurchaseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "tickets"
+        ]
+      }
+    },
+    "/api/tickets/ai/reservations": {
+      "post": {
+        "operationId": "TicketsController_reserveAiTickets",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReserveAiTicketsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "tickets"
+        ]
+      }
+    },
+    "/api/uploads": {
+      "post": {
+        "operationId": "UploadsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUploadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploads"
+        ]
+      }
+    },
+    "/api/uploads/{id}/complete": {
+      "post": {
+        "operationId": "UploadsController_complete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploads"
+        ]
+      }
+    },
+    "/api/uploads/{id}/content": {
+      "get": {
+        "operationId": "UploadsController_getContent",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirects to a fresh private signed download URL"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploads"
+        ]
+      }
+    },
+    "/api/uploads/{id}": {
+      "get": {
+        "operationId": "UploadsController_getDownload",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploads"
+        ]
+      },
+      "delete": {
+        "operationId": "UploadsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploads"
+        ]
+      }
+    },
+    "/api/v1/operations/job-posting-extract": {
+      "post": {
+        "operationId": "WorkflowOperationController_jobPostingExtract",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkflowOperationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "workflow operations v1"
+        ]
+      }
+    },
+    "/api/v1/operations/candidate-evidence-interpret": {
+      "post": {
+        "operationId": "WorkflowOperationController_candidateEvidenceInterpret",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkflowOperationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "workflow operations v1"
+        ]
+      }
+    },
+    "/api/v1/operations/project-proposals": {
+      "post": {
+        "operationId": "WorkflowOperationController_projectProposals",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkflowOperationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "workflow operations v1"
+        ]
+      }
+    },
+    "/api/v1/operations/project-plan": {
+      "post": {
+        "operationId": "WorkflowOperationController_projectPlan",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectPlanOperationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "workflow operations v1"
+        ]
+      }
+    },
+    "/api/v1/operations/{id}": {
+      "get": {
+        "operationId": "WorkflowOperationController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "workflow operations v1"
+        ]
+      },
+      "delete": {
+        "operationId": "WorkflowOperationController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "workflow operations v1"
+        ]
+      }
+    },
+    "/api/workflow-operations/{id}": {
+      "get": {
+        "operationId": "WorkflowOperationPublicController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "workflow operations"
+        ]
+      }
+    },
+    "/api/workflow-operations/{id}/cancel": {
+      "post": {
+        "operationId": "WorkflowOperationPublicController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "if-match",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "workflow operations"
+        ]
+      }
+    },
+    "/api/career/target-imports": {
+      "post": {
+        "operationId": "CareerV1Controller_targetImport",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TargetImportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career v1"
+        ]
+      }
+    },
+    "/api/career/profile-snapshot-operations/github": {
+      "post": {
+        "operationId": "CareerV1Controller_profileOperation",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileSnapshotOperationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career v1"
+        ]
+      }
+    },
+    "/api/career/target-versions/{id}": {
+      "get": {
+        "operationId": "CareerV1Controller_targetVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career v1"
+        ]
+      }
+    },
+    "/api/career/profile-snapshots/{id}": {
+      "get": {
+        "operationId": "CareerV1Controller_profile",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career v1"
+        ]
+      }
+    },
+    "/api/career/profile-snapshots/{id}/confirm": {
+      "post": {
+        "operationId": "CareerV1Controller_confirmProfile",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmProfileSnapshotDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career v1"
+        ]
+      }
+    },
+    "/api/career/targets/{id}/diff-snapshots": {
+      "post": {
+        "operationId": "CareerV1Controller_createDiff",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCareerDiffDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career v1"
+        ]
+      }
+    },
+    "/api/career/diff-snapshots/{id}": {
+      "get": {
+        "operationId": "CareerV1Controller_diff",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career v1"
+        ]
+      }
+    },
+    "/api/career/diff-snapshots/{id}/confirm": {
+      "post": {
+        "operationId": "CareerV1Controller_confirmDiff",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmCareerDiffDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career v1"
+        ]
+      }
+    },
+    "/api/career/targets/{id}/project-proposal-operations": {
+      "post": {
+        "operationId": "CareerV1Controller_proposals",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectProposalOperationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career v1"
+        ]
+      }
+    },
+    "/api/career/project-proposal-sets/{id}": {
+      "get": {
+        "operationId": "CareerV1Controller_proposalSet",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career v1"
+        ]
+      }
+    },
+    "/api/project-run-operations": {
+      "post": {
+        "operationId": "ProjectRunOperationsController_create",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRunOperationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project run operations"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Jagalchi API",
+    "description": "Jagalchi modular API contract",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "RunAiJobDto": {
+        "type": "object",
+        "properties": {
+          "feature": {
+            "type": "string",
+            "enum": [
+              "coaching",
+              "node_explanation",
+              "resource_recommendation",
+              "deep_search",
+              "feedback",
+              "roadmap_generation",
+              "document_conversion"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 120
+          },
+          "roadmapId": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "feature",
+          "idempotencyKey",
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 60
+          },
+          "password": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 128
+          },
+          "registrationProof": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "password",
+          "registrationProof"
+        ],
+        "additionalProperties": false
+      },
+      "WebRegistrationResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "accessToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "roles",
+          "accessToken"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateProfileDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "SendEmailVerificationDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "VerifyEmailDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "additionalProperties": false
+      },
+      "NativeAuthUserDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "roles"
+        ],
+        "additionalProperties": false
+      },
+      "WebAuthResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/NativeAuthUserDto"
+          }
+        },
+        "required": [
+          "accessToken",
+          "user"
+        ],
+        "additionalProperties": false
+      },
+      "NativeAuthResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "refreshToken": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/NativeAuthUserDto"
+          }
+        },
+        "required": [
+          "accessToken",
+          "refreshToken",
+          "user"
+        ],
+        "additionalProperties": false
+      },
+      "NativeRefreshDto": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "refreshToken"
+        ],
+        "additionalProperties": false
+      },
+      "NativeLogoutDto": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "refreshToken"
+        ],
+        "additionalProperties": false
+      },
+      "ResetPasswordDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "OAuthCallbackQueryDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "OAuthExchangeDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "CreateCareerTargetDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "CreateCareerEvidenceDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "ReviewCareerEvidenceDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "CreateProofMissionDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "ReplaceProofCriteriaDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "BindProofPullRequestDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "IdempotentCommandDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "ReviewProofMissionDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "UpdateProofProfileDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "PublishProofDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "UnpublishProofDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "GithubInstallationClaimDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "ProjectRunPlanDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "schemaVersion": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "schemaVersion"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunMapNodeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "milestoneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "LOCKED",
+              "READY",
+              "IN_PROGRESS",
+              "BLOCKED",
+              "DEFERRED",
+              "VERIFYING",
+              "DONE"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "milestoneId",
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunMapEdgeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "PREREQUISITE",
+              "SEQUENCE"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "target",
+          "kind"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunMapDto": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "maxItems": 40,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectRunMapNodeDto"
+            }
+          },
+          "edges": {
+            "maxItems": 120,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectRunMapEdgeDto"
+            }
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunVerificationFailureDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000,
+            "nullable": true
+          }
+        },
+        "required": [
+          "code",
+          "note"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunTaskDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "LOCKED",
+              "READY",
+              "IN_PROGRESS",
+              "BLOCKED",
+              "DEFERRED",
+              "VERIFYING",
+              "DONE"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "milestoneId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "nullable": true
+          },
+          "prerequisiteIds": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            }
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "acceptanceCriteria": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "evidenceRequirements": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "verificationFailure": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProjectRunVerificationFailureDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "state",
+          "required",
+          "milestoneId",
+          "prerequisiteIds",
+          "purpose",
+          "acceptanceCriteria",
+          "evidenceRequirements"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunProofPublicationDto": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "UNPUBLISHED",
+              "INVALIDATED"
+            ]
+          },
+          "publicId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "nullable": true
+          }
+        },
+        "required": [
+          "state",
+          "publicId"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunProofVerificationDto": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "PASS",
+              "FAIL",
+              "STALE"
+            ]
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "state",
+          "verifiedAt"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunProofEvaluationDto": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "MERGED_PR",
+              "BASE_BRANCH",
+              "CHANGED_PATH",
+              "NAMED_CHECK"
+            ]
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "ruleId",
+          "type",
+          "passed",
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunProofFactsDto": {
+        "type": "object",
+        "properties": {
+          "snapshotId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "verificationLevel": {
+            "type": "string",
+            "enum": [
+              "MACHINE_VERIFIED",
+              "INDEPENDENTLY_REVIEWED"
+            ]
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "fixture",
+              "github"
+            ]
+          },
+          "repositoryId": {
+            "type": "string",
+            "pattern": "^[1-9]\\d{0,19}$"
+          },
+          "pullNumber": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "headSha": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "evaluations": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectRunProofEvaluationDto"
+            }
+          }
+        },
+        "required": [
+          "snapshotId",
+          "verificationLevel",
+          "provider",
+          "repositoryId",
+          "pullNumber",
+          "headSha",
+          "observedAt",
+          "evaluations"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunProofDto": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "publication": {
+            "$ref": "#/components/schemas/ProjectRunProofPublicationDto"
+          },
+          "verification": {
+            "$ref": "#/components/schemas/ProjectRunProofVerificationDto"
+          },
+          "facts": {
+            "$ref": "#/components/schemas/ProjectRunProofFactsDto"
+          }
+        },
+        "required": [
+          "summary",
+          "validUntil",
+          "publication",
+          "verification"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunProjectionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "ACTIVE",
+              "BLOCKED",
+              "COMPLETED",
+              "ARCHIVED"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "target": {
+            "type": "object"
+          },
+          "currentTaskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "nullable": true
+          },
+          "recommendedTaskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "nullable": true
+          },
+          "plan": {
+            "$ref": "#/components/schemas/ProjectRunPlanDto"
+          },
+          "map": {
+            "$ref": "#/components/schemas/ProjectRunMapDto"
+          },
+          "tasks": {
+            "maxItems": 40,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectRunTaskDto"
+            }
+          },
+          "proof": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProjectRunProofDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "version",
+          "currentTaskId",
+          "recommendedTaskId",
+          "plan",
+          "map",
+          "tasks",
+          "proof"
+        ],
+        "additionalProperties": false
+      },
+      "RealtimeTicketResponseDto": {
+        "type": "object",
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "minLength": 43,
+            "maxLength": 43
+          },
+          "audience": {
+            "type": "string",
+            "enum": [
+              "roadmaps"
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "ticket",
+          "audience",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "CreateDirectoryDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "MoveDirectoryDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "RenameDirectoryDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "CreateRoadmapDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "UpdateRoadmapDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "CompleteNodeDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "CreateCommentDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "UpdateCommentDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "UpdateNotificationPreferencesDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "FulfillTicketPurchaseDto": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "ReserveAiTicketsDto": {
+        "type": "object",
+        "properties": {
+          "feature": {
+            "type": "string",
+            "enum": [
+              "coaching",
+              "node_explanation",
+              "resource_recommendation",
+              "deep_search",
+              "feedback",
+              "roadmap_generation",
+              "document_conversion"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "feature",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "UploadPurpose": {
+        "type": "string",
+        "enum": [
+          "PROFILE_IMAGE",
+          "ROADMAP_ATTACHMENT"
+        ]
+      },
+      "CreateUploadDto": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UploadPurpose"
+              }
+            ]
+          },
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 180,
+            "example": "evidence.pdf"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/webp",
+              "application/pdf",
+              "text/plain"
+            ],
+            "example": "application/pdf"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5242880,
+            "example": 1024
+          },
+          "roadmapId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "purpose",
+          "fileName",
+          "contentType",
+          "size"
+        ],
+        "additionalProperties": false
+      },
+      "CreateWorkflowOperationDto": {
+        "type": "object",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 160
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "idempotencyKey",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "CreateProjectPlanOperationDto": {
+        "type": "object",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 160
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "competencySlugs": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "idempotencyKey",
+          "input",
+          "targetId",
+          "competencySlugs"
+        ],
+        "additionalProperties": false
+      },
+      "TargetInputDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "FETCHED_URL",
+              "MANUAL_CAPTURE"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "originalUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "sourceText": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 200000
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "additionalProperties": false
+      },
+      "TargetImportDto": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "url"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "FETCHED_URL"
+                    ]
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "maxLength": 2048
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "sourceText"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "MANUAL_CAPTURE"
+                    ]
+                  },
+                  "originalUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "maxLength": 2048
+                  },
+                  "sourceText": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 200000
+                  }
+                }
+              }
+            ],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TargetInputDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "ProfileSnapshotOperationDto": {
+        "type": "object",
+        "properties": {
+          "repositoryIds": {
+            "maxItems": 50,
+            "description": "Empty selects all eligible installed repositories within the server cap.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "repositoryIds"
+        ],
+        "additionalProperties": false
+      },
+      "CompetencyCorrectionDto": {
+        "type": "object",
+        "properties": {
+          "competencyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "ACCEPT",
+              "REJECT"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "competencyId",
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "ConfirmProfileSnapshotDto": {
+        "type": "object",
+        "properties": {
+          "acceptedRepositoryIds": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "competencyCorrections": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompetencyCorrectionDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateCareerDiffDto": {
+        "type": "object",
+        "properties": {
+          "careerTargetVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidateProfileSnapshotId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "careerTargetVersionId",
+          "candidateProfileSnapshotId"
+        ],
+        "additionalProperties": false
+      },
+      "DiffCorrectionDto": {
+        "type": "object",
+        "properties": {
+          "competencyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OBSERVED",
+              "INFERRED",
+              "MISSING"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "competencyId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "ConfirmCareerDiffDto": {
+        "type": "object",
+        "properties": {
+          "acceptedCompetencyIds": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "corrections": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiffCorrectionDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProposalConstraintsDto": {
+        "type": "object",
+        "properties": {
+          "availableHours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 160
+          },
+          "preferredStack": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowedRepositoryModes": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "string",
+              "enum": [
+                "EXISTING_OWNED",
+                "OPEN_SOURCE_CONTRIBUTION",
+                "MANUAL_GREENFIELD"
+              ]
+            }
+          }
+        },
+        "required": [
+          "availableHours",
+          "preferredStack",
+          "allowedRepositoryModes"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectProposalOperationDto": {
+        "type": "object",
+        "properties": {
+          "careerDiffSnapshotId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/ProposalConstraintsDto"
+          }
+        },
+        "required": [
+          "careerDiffSnapshotId",
+          "constraints"
+        ],
+        "additionalProperties": false
+      },
+      "RepositoryBindingDto": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "EXISTING_OWNED",
+              "OPEN_SOURCE_CONTRIBUTION",
+              "MANUAL_GREENFIELD"
+            ]
+          },
+          "githubRepositoryId": {
+            "type": "string",
+            "pattern": "^[1-9]\\d{0,19}$"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunConstraintsDto": {
+        "type": "object",
+        "properties": {
+          "availableHours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 160
+          }
+        },
+        "required": [
+          "availableHours"
+        ],
+        "additionalProperties": false
+      },
+      "CreateProjectRunOperationDto": {
+        "type": "object",
+        "properties": {
+          "projectProposalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidateProfileSnapshotId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "careerDiffSnapshotId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/RepositoryBindingDto"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/ProjectRunConstraintsDto"
+          }
+        },
+        "required": [
+          "projectProposalId",
+          "candidateProfileSnapshotId",
+          "careerDiffSnapshotId",
+          "repository",
+          "constraints"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}
