@@ -112,6 +112,87 @@ describe('WorkflowOperationWorker', () => {
     expect(operations.fail).not.toHaveBeenCalled();
   });
 
+  it('keeps worker heartbeats fresh while a handler blocks longer than the health window', async () => {
+    vi.useFakeTimers();
+    try {
+      const operation = { id: 'operation-blocked', kind: 'PROJECT_RUN', state: WorkflowOperationState.Running } as WorkflowOperation;
+      let releaseHandler: (() => void) | undefined;
+      const handlerBlocked = new Promise<Record<string, unknown>>((resolve) => {
+        releaseHandler = () => resolve({ projectRunId: 'run-1' });
+      });
+      const operations = {
+        reapExpired: vi.fn().mockResolvedValue(0),
+        recordWorkerHeartbeat: vi.fn().mockResolvedValue(undefined),
+        claim: vi.fn().mockResolvedValue(operation),
+        succeed: vi.fn().mockResolvedValue(undefined),
+        heartbeat: vi.fn().mockResolvedValue(true),
+        finishCancellation: vi.fn().mockResolvedValue(false),
+        abandon: vi.fn(), retry: vi.fn(), fail: vi.fn(),
+      };
+      const heartbeatConfig = { get: (key: string) => ({
+        WORKFLOW_LEASE_MS: '120000', WORKFLOW_HEARTBEAT_MS: '5000', WORKFLOW_POLL_MS: '1000', AI_TIMEOUT_MS: '65000',
+      })[key] };
+      const handlers = new WorkflowOperationHandlers();
+      handlers.register('PROJECT_RUN', vi.fn(() => handlerBlocked));
+      const worker = new WorkflowOperationWorker(operations as never, handlers, heartbeatConfig as never);
+      worker.startResident('worker-1');
+
+      const running = worker.runOnce('worker-1');
+      await vi.waitFor(() => expect(operations.claim).toHaveBeenCalled());
+      const heartbeatsAtClaim = operations.recordWorkerHeartbeat.mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(16_000);
+      expect(operations.recordWorkerHeartbeat.mock.calls.length - heartbeatsAtClaim).toBeGreaterThanOrEqual(3);
+      expect(operations.heartbeat).toHaveBeenCalled();
+
+      releaseHandler!();
+      await running;
+
+      await worker.stop();
+      const heartbeatsAfterStop = operations.recordWorkerHeartbeat.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(operations.recordWorkerHeartbeat.mock.calls.length).toBe(heartbeatsAfterStop);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects a second resident heartbeat owner for the same worker process', () => {
+    const operations = { recordWorkerHeartbeat: vi.fn().mockResolvedValue(undefined) };
+    const worker = new WorkflowOperationWorker(operations as never, new WorkflowOperationHandlers(), config as never);
+    worker.startResident('worker-1');
+    expect(() => worker.startResident('worker-2')).toThrow(/already owned by worker-1/);
+    void worker.stop();
+  });
+
+  it('does not overlap resident worker heartbeat writes', async () => {
+    vi.useFakeTimers();
+    try {
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const operations = {
+        recordWorkerHeartbeat: vi.fn(() => new Promise<void>((resolve) => {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          setTimeout(() => {
+            inFlight -= 1;
+            resolve();
+          }, 4_000);
+        })),
+      };
+      const heartbeatConfig = { get: (key: string) => ({
+        WORKFLOW_LEASE_MS: '120000', WORKFLOW_HEARTBEAT_MS: '1000', WORKFLOW_POLL_MS: '1000', AI_TIMEOUT_MS: '65000',
+      })[key] };
+      const worker = new WorkflowOperationWorker(operations as never, new WorkflowOperationHandlers(), heartbeatConfig as never);
+      worker.startResident('worker-1');
+      await vi.advanceTimersByTimeAsync(5_500);
+      expect(maxInFlight).toBe(1);
+      await worker.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('abandons the active lease and aborts hold-after-claim on graceful stop', async () => {
     const operation = { id: 'operation-held', kind: 'PROJECT_PLAN', state: WorkflowOperationState.Running } as WorkflowOperation;
     const operations = {

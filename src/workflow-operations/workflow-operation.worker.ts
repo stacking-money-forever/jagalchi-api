@@ -29,6 +29,9 @@ export class WorkflowOperationWorker {
   private readonly logger = new Logger(WorkflowOperationWorker.name);
   private active: { operationId: string; workerId: string; abort: AbortController } | undefined;
   private stopping = false;
+  private residentWorkerId: string | undefined;
+  private residentHeartbeatTimer: NodeJS.Timeout | undefined;
+  private residentHeartbeatInFlight = false;
 
   constructor(
     private readonly operations: WorkflowOperationService,
@@ -36,6 +39,21 @@ export class WorkflowOperationWorker {
     private readonly config: ConfigService,
     private readonly clock: WorkflowClock = new WorkflowClock(),
   ) {}
+
+  startResident(workerId: string): void {
+    if (this.residentHeartbeatTimer) {
+      if (this.residentWorkerId !== workerId) {
+        throw new Error(`Workflow worker heartbeat already owned by ${this.residentWorkerId}`);
+      }
+      return;
+    }
+    this.residentWorkerId = workerId;
+    const { heartbeatMs } = workflowTiming(this.config);
+    const tick = () => this.pulseResidentHeartbeat(workerId);
+    tick();
+    this.residentHeartbeatTimer = setInterval(tick, heartbeatMs);
+    this.residentHeartbeatTimer.unref();
+  }
 
   async runOnce(workerId: string): Promise<boolean> {
     if (this.stopping) return false;
@@ -82,10 +100,32 @@ export class WorkflowOperationWorker {
 
   async stop(): Promise<void> {
     this.stopping = true;
+    this.stopResidentHeartbeat();
     const active = this.active;
     if (!active) return;
     active.abort.abort(new Error('Workflow worker is shutting down'));
     await this.operations.abandon(active.operationId, active.workerId);
+  }
+
+  private pulseResidentHeartbeat(workerId: string): void {
+    if (this.residentHeartbeatInFlight) return;
+    this.residentHeartbeatInFlight = true;
+    void this.operations.recordWorkerHeartbeat(workerId)
+      .catch((error: unknown) => {
+        this.logger.warn(`Worker heartbeat failed: ${error instanceof Error ? error.message : 'unknown'}`);
+      })
+      .finally(() => {
+        this.residentHeartbeatInFlight = false;
+      });
+  }
+
+  private stopResidentHeartbeat(): void {
+    if (this.residentHeartbeatTimer) {
+      clearInterval(this.residentHeartbeatTimer);
+      this.residentHeartbeatTimer = undefined;
+    }
+    this.residentWorkerId = undefined;
+    this.residentHeartbeatInFlight = false;
   }
 
   private classifyFailure(error: unknown): {

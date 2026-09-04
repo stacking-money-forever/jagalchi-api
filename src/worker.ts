@@ -19,6 +19,7 @@ async function bootstrap(): Promise<void> {
   };
   process.once('SIGTERM', stop);
   process.once('SIGINT', stop);
+  worker.startResident(workerId);
   while (!stopping) {
     const handled = await worker.runOnce(workerId);
     if (!handled) await new Promise((resolve) => setTimeout(resolve, pollMs));
