@@ -84,6 +84,46 @@ describe("validateEnvironment", () => {
     const environment = productionEnvironment();
     expect(validateEnvironment(environment)).toBe(environment);
   });
+  it("allows a non-production environment without an E2E completion IP override", () => {
+    const environment = {
+      ...productionEnvironment(),
+      NODE_ENV: "development",
+    };
+    expect(validateEnvironment(environment)).toBe(environment);
+    expect(environment.E2E_COMPLETION_IP_LIMIT).toBeUndefined();
+  });
+
+  it("accepts a bounded non-production completion IP override", () => {
+    const environment = {
+      ...productionEnvironment(),
+      NODE_ENV: "development",
+      E2E_COMPLETION_IP_LIMIT: "25",
+    };
+    expect(validateEnvironment(environment)).toBe(environment);
+    expect(environment.E2E_COMPLETION_IP_LIMIT).toBe("25");
+  });
+
+  it.each(["0", "101", "1.5", "-1"])(
+    "rejects an invalid non-production completion IP override %s",
+    (value) => {
+      expect(() =>
+        validateEnvironment({
+          ...productionEnvironment(),
+          NODE_ENV: "development",
+          E2E_COMPLETION_IP_LIMIT: value,
+        }),
+      ).toThrow("E2E_COMPLETION_IP_LIMIT must be an integer between 1 and 100");
+    },
+  );
+
+  it("rejects the E2E completion IP override in production", () => {
+    expect(() =>
+      validateEnvironment({
+        ...productionEnvironment(),
+        E2E_COMPLETION_IP_LIMIT: "25",
+      }),
+    ).toThrow("E2E_COMPLETION_IP_LIMIT is not allowed in production");
+  });
 
   it("accepts a full-feature production contract", () => {
     const environment = fullProductionEnvironment();

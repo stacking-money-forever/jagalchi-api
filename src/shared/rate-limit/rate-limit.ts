@@ -5,6 +5,7 @@ import type { JwtService } from '@nestjs/jwt';
 import type { ThrottlerModuleOptions } from '@nestjs/throttler';
 
 export const RATE_LIMIT_POLICY = 'jagalchi:rate-limit-policy';
+const DEFAULT_COMPLETION_IP_LIMIT = 10;
 export type RateLimitPolicy = 'entry' | 'request' | 'completion';
 export const RateLimited = (policy: RateLimitPolicy): MethodDecorator =>
   SetMetadata(RATE_LIMIT_POLICY, policy);
@@ -73,6 +74,13 @@ export const createRateLimitOptions = (
   jwt: JwtService,
   config: ConfigService,
 ): ThrottlerModuleOptions => {
+  const production = config.get<string>('NODE_ENV') === 'production';
+  const completionIpLimit = production
+    ? DEFAULT_COMPLETION_IP_LIMIT
+    : Number(
+        config.get<string>('E2E_COMPLETION_IP_LIMIT') ??
+          String(DEFAULT_COMPLETION_IP_LIMIT),
+      );
   const hashSecret = config.getOrThrow<string>('RATE_LIMIT_HASH_SECRET');
   const identityFor = (context: ExecutionContext) =>
     resolveIdentity(requestFrom(context), jwt, hashSecret);
@@ -105,7 +113,7 @@ export const createRateLimitOptions = (
       { name: 'entryAccount', ttl: 3_600_000, limit: 20, skipIf: applies('entry') },
       { name: 'requestIp', ttl: 3_600_000, limit: 10, skipIf: applies('request') },
       { name: 'requestAccount', ttl: 3_600_000, limit: 3, skipIf: applies('request') },
-      { name: 'completionIp', ttl: 60_000, limit: 10, skipIf: applies('completion') },
+      { name: 'completionIp', ttl: 60_000, limit: completionIpLimit, skipIf: applies('completion') },
       { name: 'completionAccount', ttl: 3_600_000, limit: 20, skipIf: applies('completion') },
     ],
   };

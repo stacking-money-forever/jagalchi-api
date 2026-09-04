@@ -14,20 +14,44 @@ const contextFor = (request: Record<string, unknown>, policy?: 'entry' | 'reques
 };
 
 describe('createRateLimitOptions', () => {
-  const create = () => {
+  const create = (configValues: { nodeEnv?: string; completionIpLimit?: string } = {}) => {
     const jwt = {
       verifyAsync: vi.fn(async (token: string) => {
         if (token !== 'valid') throw new Error('invalid token');
         return { sub: 'user-1' };
       }),
     };
-    const config = { getOrThrow: vi.fn(() => 's'.repeat(32)) };
+    const config = {
+      getOrThrow: vi.fn(() => 's'.repeat(32)),
+      get: vi.fn((key: string) =>
+        key === 'NODE_ENV'
+          ? configValues.nodeEnv
+          : key === 'E2E_COMPLETION_IP_LIMIT'
+            ? configValues.completionIpLimit
+            : undefined,
+      ),
+    };
     const options = createRateLimitOptions(jwt as never, config as never) as Exclude<
       ReturnType<typeof createRateLimitOptions>,
       unknown[]
     >;
     return { jwt, options };
   };
+  it('defaults completion IP throttling to 10/min', () => {
+    const { options } = create();
+    expect(options.throttlers.find((item) => item.name === 'completionIp')?.limit).toBe(10);
+  });
+
+  it('uses the non-production override only for completion IP throttling', () => {
+    const { options } = create({ nodeEnv: 'development', completionIpLimit: '25' });
+    expect(options.throttlers.find((item) => item.name === 'completionIp')?.limit).toBe(25);
+    expect(options.throttlers.find((item) => item.name === 'completionAccount')?.limit).toBe(20);
+  });
+
+  it('keeps the production completion IP limit hard at 10', () => {
+    const { options } = create({ nodeEnv: 'production', completionIpLimit: '25' });
+    expect(options.throttlers.find((item) => item.name === 'completionIp')?.limit).toBe(10);
+  });
 
   it('uses 60/min for anonymous requests and 120/min for signed users', async () => {
     const { options } = create();

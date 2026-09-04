@@ -14,6 +14,7 @@ const FEATURE_FLAGS = [
   "EMAIL_ENABLED",
   "PROJECT_RUNS_ENABLED",
 ] as const;
+const MAX_E2E_COMPLETION_IP_LIMIT = 100;
 
 const required = (environment: Environment, key: string): string => {
   const value = environment[key]?.trim();
@@ -143,6 +144,9 @@ export const validateEnvironment = (environment: Environment): Environment => {
   environment.WORKFLOW_LEASE_MS ??= String(WORKFLOW_TIMING_DEFAULTS.leaseMs);
   environment.WORKFLOW_HEARTBEAT_MS ??= String(WORKFLOW_TIMING_DEFAULTS.heartbeatMs);
   environment.WORKFLOW_POLL_MS ??= String(WORKFLOW_TIMING_DEFAULTS.pollMs);
+  if (production && environment.E2E_COMPLETION_IP_LIMIT !== undefined) {
+    throw new Error("E2E_COMPLETION_IP_LIMIT is not allowed in production");
+  }
   for (const key of FEATURE_FLAGS) {
     if (production) requiredBoolean(environment, key);
     else if (
@@ -238,6 +242,10 @@ export const validateEnvironment = (environment: Environment): Environment => {
   optionalInteger(environment, 'WORKFLOW_RETRY_MAX_MS', { min: 1_000, max: 300_000 });
   optionalInteger(environment, 'WORKFLOW_HEALTH_MAX_AGE_MS', { min: 1_000, max: 120_000 });
   optionalInteger(environment, 'WORKFLOW_HOLD_AFTER_CLAIM_MS', { min: 0, max: 120_000 });
+  optionalInteger(environment, "E2E_COMPLETION_IP_LIMIT", {
+    min: 1,
+    max: MAX_E2E_COMPLETION_IP_LIMIT,
+  });
   const aiTimeoutMs = Number(environment.AI_TIMEOUT_MS);
   const leaseMs = Number(environment.WORKFLOW_LEASE_MS);
   const heartbeatMs = Number(environment.WORKFLOW_HEARTBEAT_MS);
