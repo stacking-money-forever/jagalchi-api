@@ -136,11 +136,12 @@ export class ProjectRunsService {
       const run = await manager.getRepository(ProjectRun).findOne({ where: { id: runId, ownerId }, lock: { mode: 'pessimistic_write' } });
       if (!run) throw new NotFoundException('Project run is not available');
       if (run.version !== expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale', { currentVersion: run.version });
+      const concurrentReplay = await commands.findOne({ where: { ownerId, route, idempotencyKey } });
+      if (concurrentReplay) { if (concurrentReplay.inputHash !== inputHash) this.conflict('IDEMPOTENCY_KEY_REUSED', 'Idempotency key was reused with different input'); return concurrentReplay.response; }
       if (run.state !== ProjectRunState.Completed) this.conflict('RUN_NOT_COMPLETED', 'Only a completed Project Run can be reverified');
       const latest = await manager.getRepository(ProofSnapshot).findOne({ where: { projectRunId: run.id }, order: { createdAt: 'DESC' } });
-      if (latest) {
-        try { await this.invalidation?.assertSnapshotPublishable(manager, latest.id); this.conflict('VERIFICATION_ALREADY_CURRENT', 'The current verification remains publishable'); } catch (error) { if (!(error instanceof ConflictException) || (error.getResponse() as { code?: string }).code !== 'VERIFICATION_STALE') throw error; }
-      }
+      if (!latest || latest.payload.status !== 'PASS') this.conflict('VERIFICATION_STALE', 'A current passing verification is required');
+      if (await this.hasInFlightVerification(manager, ownerId, run.id)) this.conflict('VERIFICATION_IN_PROGRESS', 'A verification is already in progress for this Project Run');
       run.version += 1; run.projection = { ...run.projection, version: run.version }; await manager.getRepository(ProjectRun).save(run);
       const now = new Date(); const operation = await manager.getRepository(WorkflowOperation).save(manager.getRepository(WorkflowOperation).create({ ownerId, route, idempotencyKey, kind: 'PROOF_REVERIFICATION', inputHash, input: { schemaVersion: 1, projectRunId: run.id, runVersion: run.version }, inputSchemaVersion: 1, resultSchemaVersion: 1, state: WorkflowOperationState.Pending, availableAt: now, nextAttemptAt: now, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null, attempts: 0, maxAttempts: 3, errorCode: null, errorMessage: null, failureClass: null, resultType: null, resultId: null, resultHref: null, completedAt: null }));
       const response = { id: operation.id, kind: operation.kind, state: operation.state, version: operation.version ?? 1, result: null, error: null };
@@ -331,6 +332,16 @@ export class ProjectRunsService {
     return manager.getRepository(WorkflowOperation).createQueryBuilder('op')
       .where('op.owner_id = :ownerId', { ownerId })
       .andWhere(`op.kind = 'TASK_VERIFICATION'`)
+      .andWhere(`op.input ->> 'projectRunId' = :projectRunId`, { projectRunId })
+      .getExists();
+  }
+
+  private async hasInFlightVerification(manager: { getRepository: DataSource['getRepository'] }, ownerId: string, projectRunId: string): Promise<boolean> {
+    if (await manager.getRepository(ProjectTask).exists({ where: { projectRunId, state: 'VERIFYING' } })) return true;
+    return manager.getRepository(WorkflowOperation).createQueryBuilder('op')
+      .where('op.owner_id = :ownerId', { ownerId })
+      .andWhere(`op.kind IN ('TASK_VERIFICATION', 'PROOF_REVERIFICATION')`)
+      .andWhere(`op.state IN ('PENDING', 'RUNNING', 'CANCEL_REQUESTED')`)
       .andWhere(`op.input ->> 'projectRunId' = :projectRunId`, { projectRunId })
       .getExists();
   }

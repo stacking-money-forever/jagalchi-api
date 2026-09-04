@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { ProjectRunState } from './project-run.entity';
 import { ProjectRunsService } from './project-runs.service';
@@ -163,23 +163,69 @@ describe('ProjectRunsService', () => {
     expect(snapshots.save).not.toHaveBeenCalled();
   });
 
-  it('enqueues fixture reverification only when the latest snapshot is stale', async () => {
+  it('enqueues fixture reverification when the latest snapshot remains publishable', async () => {
     const runId = '00000000-0000-4000-8000-000000000001';
-    const projection = { id: runId, state: ProjectRunState.Completed, version: 4, currentTaskId: null, recommendedTaskId: null, plan: { id: 'plan-1', schemaVersion: 1 }, map: { nodes: [], edges: [] }, tasks: [], proof: null };
+    const projection = { id: runId, state: ProjectRunState.Completed, version: 4, currentTaskId: null, recommendedTaskId: null, plan: { id: 'plan-1', schemaVersion: 1 }, map: { nodes: [], edges: [] }, tasks: [], proof: { summary: 'Verified', validUntil: null, publication: { state: 'ACTIVE', publicId: 'AAAAAAAAAAAAAAAAAAAAAAAAAAA' }, verification: { state: 'PASS', verifiedAt: '2026-09-03T00:00:00.000Z' }, facts: { snapshotId: 'snapshot-1', verificationLevel: 'MACHINE_VERIFIED', headSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } } };
     const run = { id: runId, ownerId: 'owner-1', state: ProjectRunState.Completed, version: 4, projection };
     const commands = { findOne: vi.fn().mockResolvedValue(null), create: vi.fn((value) => value), save: vi.fn(async (value) => value) };
     const runs = { findOne: vi.fn().mockResolvedValue(run), save: vi.fn(async (value) => value) };
     const profiles = { findOne: vi.fn().mockResolvedValue({ state: ProofProfileState.Enabled }) };
     const entitlements = { exists: vi.fn().mockResolvedValue(true) };
-    const snapshots = { findOne: vi.fn().mockResolvedValue({ id: 'snapshot-1' }) };
-    const operations = { create: vi.fn((value) => ({ id: '00000000-0000-4000-8000-000000000077', version: 1, ...value })), save: vi.fn(async (value) => value) };
-    const manager = { getRepository: (entity: { name: string }) => entity === ProjectRun ? runs : entity === ProjectRunCommand ? commands : entity === ProofProfile ? profiles : entity === ProofSnapshot ? snapshots : entity === WorkflowOperation ? operations : entity === ProjectFeatureEntitlement ? entitlements : null };
+    const snapshots = { findOne: vi.fn().mockResolvedValue({ id: 'snapshot-1', payload: { status: 'PASS' } }) };
+    const tasks = { exists: vi.fn().mockResolvedValue(false) };
+    const qb = { where: vi.fn(), andWhere: vi.fn(), getExists: vi.fn().mockResolvedValue(false) };
+    for (const method of ['where', 'andWhere'] as const) qb[method].mockReturnValue(qb);
+    const operations = { create: vi.fn((value) => ({ id: '00000000-0000-4000-8000-000000000077', version: 1, ...value })), save: vi.fn(async (value) => value), createQueryBuilder: vi.fn(() => qb) };
+    const manager = { getRepository: (entity: { name: string }) => entity === ProjectRun ? runs : entity === ProjectRunCommand ? commands : entity === ProofProfile ? profiles : entity === ProofSnapshot ? snapshots : entity === WorkflowOperation ? operations : entity === ProjectFeatureEntitlement ? entitlements : entity === ProjectTask ? tasks : null };
     const dataSource = { transaction: vi.fn((callback) => callback(manager)) };
     const config = { get: vi.fn((name: string) => name === 'GITHUB_PROVIDER' ? 'fixture' : name === 'PROJECT_RUNS_ENABLED' ? 'true' : undefined) };
-    const invalidation = { assertSnapshotPublishable: vi.fn().mockRejectedValue(Object.assign(new ConflictException({ code: 'VERIFICATION_STALE' }), {})) };
+    const invalidation = { assertSnapshotPublishable: vi.fn().mockResolvedValue({ id: 'snapshot-1' }) };
     const result = await new ProjectRunsService(runs as never, dataSource as never, config as never, invalidation as never).reverify('owner-1', runId, 4, key);
     expect(result).toMatchObject({ kind: 'PROOF_REVERIFICATION', state: WorkflowOperationState.Pending });
     expect(run.version).toBe(5);
+    expect(invalidation.assertSnapshotPublishable).not.toHaveBeenCalled();
+  });
+
+  it('rejects reverification while proof reverification is already in flight', async () => {
+    const runId = '00000000-0000-4000-8000-000000000001';
+    const projection = { id: runId, state: ProjectRunState.Completed, version: 4, currentTaskId: null, recommendedTaskId: null, plan: { id: 'plan-1', schemaVersion: 1 }, map: { nodes: [], edges: [] }, tasks: [], proof: null };
+    const run = { id: runId, ownerId: 'owner-1', state: ProjectRunState.Completed, version: 4, projection };
+    const commands = { findOne: vi.fn().mockResolvedValue(null) };
+    const runs = { findOne: vi.fn().mockResolvedValue(run) };
+    const profiles = { findOne: vi.fn().mockResolvedValue({ state: ProofProfileState.Enabled }) };
+    const entitlements = { exists: vi.fn().mockResolvedValue(true) };
+    const snapshots = { findOne: vi.fn().mockResolvedValue({ id: 'snapshot-1', payload: { status: 'PASS' } }) };
+    const tasks = { exists: vi.fn().mockResolvedValue(false) };
+    const qb = { where: vi.fn(), andWhere: vi.fn(), getExists: vi.fn().mockResolvedValue(true) };
+    for (const method of ['where', 'andWhere'] as const) qb[method].mockReturnValue(qb);
+    const operations = { createQueryBuilder: vi.fn(() => qb) };
+    const manager = { getRepository: (entity: { name: string }) => entity === ProjectRun ? runs : entity === ProjectRunCommand ? commands : entity === ProofProfile ? profiles : entity === ProofSnapshot ? snapshots : entity === WorkflowOperation ? operations : entity === ProjectFeatureEntitlement ? entitlements : entity === ProjectTask ? tasks : null };
+    const dataSource = { transaction: vi.fn((callback) => callback(manager)) };
+    const config = { get: vi.fn((name: string) => name === 'GITHUB_PROVIDER' ? 'fixture' : name === 'PROJECT_RUNS_ENABLED' ? 'true' : undefined) };
+    await expect(new ProjectRunsService(runs as never, dataSource as never, config as never).reverify('owner-1', runId, 4, key))
+      .rejects.toMatchObject({ response: { code: 'VERIFICATION_IN_PROGRESS' } });
+  });
+
+  it('schedules reverification after publish when the published snapshot is still current', async () => {
+    const runId = '00000000-0000-4000-8000-000000000001';
+    const projection = { id: runId, state: ProjectRunState.Completed, version: 5, currentTaskId: null, recommendedTaskId: null, plan: { id: 'plan-1', schemaVersion: 1 }, map: { nodes: [], edges: [] }, tasks: [], proof: { summary: 'Verified', validUntil: null, publication: { state: 'ACTIVE', publicId: 'AAAAAAAAAAAAAAAAAAAAAAAAAAA' }, verification: { state: 'PASS', verifiedAt: '2026-09-03T00:00:00.000Z' } } };
+    const run = { id: runId, ownerId: 'owner-1', state: ProjectRunState.Completed, version: 5, projection };
+    const commands = { findOne: vi.fn().mockResolvedValue(null), create: vi.fn((value) => value), save: vi.fn(async (value) => value) };
+    const runs = { findOne: vi.fn().mockResolvedValue(run), save: vi.fn(async (value) => value) };
+    const profiles = { findOne: vi.fn().mockResolvedValue({ ownerUserId: 'owner-1', publicId: 'AAAAAAAAAAAAAAAAAAAAAAAAAAA', state: ProofProfileState.Enabled }) };
+    const entitlements = { exists: vi.fn().mockResolvedValue(true) };
+    const snapshots = { findOne: vi.fn().mockResolvedValue({ id: 'snapshot-1', payload: { status: 'PASS' } }) };
+    const tasks = { exists: vi.fn().mockResolvedValue(false) };
+    const qb = { where: vi.fn(), andWhere: vi.fn(), getExists: vi.fn().mockResolvedValue(false) };
+    for (const method of ['where', 'andWhere'] as const) qb[method].mockReturnValue(qb);
+    const operations = { create: vi.fn((value) => ({ id: '00000000-0000-4000-8000-000000000088', version: 1, ...value })), save: vi.fn(async (value) => value), createQueryBuilder: vi.fn(() => qb) };
+    const manager = { getRepository: (entity: { name: string }) => entity === ProjectRun ? runs : entity === ProjectRunCommand ? commands : entity === ProofProfile ? profiles : entity === ProofSnapshot ? snapshots : entity === WorkflowOperation ? operations : entity === ProjectFeatureEntitlement ? entitlements : entity === ProjectTask ? tasks : null };
+    const dataSource = { transaction: vi.fn((callback) => callback(manager)) };
+    const config = { get: vi.fn((name: string) => name === 'GITHUB_PROVIDER' ? 'fixture' : name === 'PROJECT_RUNS_ENABLED' ? 'true' : undefined) };
+    const service = new ProjectRunsService(runs as never, dataSource as never, config as never, { assertSnapshotPublishable: vi.fn().mockResolvedValue({ id: 'snapshot-1' }) } as never);
+    const result = await service.reverify('owner-1', runId, 5, key);
+    expect(result).toMatchObject({ kind: 'PROOF_REVERIFICATION', state: WorkflowOperationState.Pending });
+    expect(run.version).toBe(6);
   });
 
   it('enqueues pull request binding before the first task verification attempt', async () => {
