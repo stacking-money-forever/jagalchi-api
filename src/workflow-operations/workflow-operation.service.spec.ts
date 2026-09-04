@@ -204,6 +204,33 @@ describe('WorkflowOperationService', () => {
     await expect(service.requestCancelVersioned('operation-1', 'owner-1', 1, '00000000-0000-4000-8000-000000000099'))
       .rejects.toMatchObject({ response: { code: 'STALE_VERSION', details: { currentVersion: 3 } } });
   });
+
+  it('surfaces retryable failures on workflow poll reads', async () => {
+    const operation = {
+      id: 'operation-1',
+      ownerId: 'owner-1',
+      kind: 'JOB_TARGET_IMPORT',
+      state: WorkflowOperationState.Failed,
+      version: 4,
+      attempts: 3,
+      maxAttempts: 3,
+      nextAttemptAt: null,
+      errorCode: 'JOB_SOURCE_TIMEOUT',
+      failureClass: 'TRANSIENT_DEPENDENCY',
+      resultType: null,
+      resultId: null,
+      resultHref: null,
+      createdAt: new Date('2026-09-03T00:00:00Z'),
+      updatedAt: new Date('2026-09-03T00:00:05Z'),
+    };
+    const operations = { findOneByOrFail: vi.fn().mockResolvedValue(operation) };
+    const service = new WorkflowOperationService({} as never, operations as never, {} as never);
+    await expect(service.get('owner-1', 'operation-1')).resolves.toMatchObject({
+      state: 'FAILED',
+      attempt: 3,
+      error: { code: 'JOB_SOURCE_TIMEOUT', retryable: true },
+    });
+  });
   it('reads the newest worker heartbeat without TypeORM findOne order-only queries', async () => {
     const newest = new Date('2026-09-04T00:00:00Z');
     const workerHeartbeats = {
