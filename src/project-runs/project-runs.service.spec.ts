@@ -8,20 +8,21 @@ import { ProjectFeatureEntitlement, ProjectRepositoryBinding, ProjectRunCommand,
 import { ProofProfile, ProofProfileState } from '../career/career.entities';
 
 const key = '00000000-0000-4000-8000-000000000099';
-function transitionSubject(taskOverrides: Record<string, unknown> = {}, runOverrides: Record<string, unknown> = {}) {
+function transitionSubject(taskOverrides: Record<string, unknown> = {}, runOverrides: Record<string, unknown> = {}, options: { sharedTaskReference?: boolean } = {}) {
   const runId = '00000000-0000-4000-8000-000000000001';
   const baseTask = { id: 'task-row-1', projectRunId: runId, taskKey: 'task-1', title: 'Ship', state: 'READY', required: true, milestoneId: 'm-1', prerequisiteIds: [], purpose: 'Ship', acceptanceCriteria: ['Pass'], evidenceRequirements: ['PR'], blockedFrom: null, blockReasonCode: null, blockNote: null, version: 1, startedAt: null, createdAt: new Date() };
-  const task = { ...baseTask, ...taskOverrides };
-  const projection = { id: runId, state: ProjectRunState.Ready, version: 1, currentTaskId: null, recommendedTaskId: 'task-1', plan: { id: 'plan-1', schemaVersion: 1 }, map: { nodes: [{ id: 'task-1', title: 'Ship', milestoneId: 'm-1', state: task.state }], edges: [] }, tasks: [{ id: 'task-1', title: 'Ship', state: task.state, required: task.required, milestoneId: 'm-1', prerequisiteIds: task.prerequisiteIds, purpose: 'Ship', acceptanceCriteria: ['Pass'], evidenceRequirements: ['PR'] }], proof: null };
+  const lockedTask = { ...baseTask, ...taskOverrides };
+  const listedTask = options.sharedTaskReference ? lockedTask : { ...lockedTask };
+  const projection = { id: runId, state: ProjectRunState.Ready, version: 1, currentTaskId: null, recommendedTaskId: 'task-1', plan: { id: 'plan-1', schemaVersion: 1 }, map: { nodes: [{ id: 'task-1', title: 'Ship', milestoneId: 'm-1', state: listedTask.state }], edges: [] }, tasks: [{ id: 'task-1', title: 'Ship', state: listedTask.state, required: listedTask.required, milestoneId: 'm-1', prerequisiteIds: listedTask.prerequisiteIds, purpose: 'Ship', acceptanceCriteria: ['Pass'], evidenceRequirements: ['PR'] }], proof: null };
   const run = { id: runId, ownerId: 'owner-1', state: ProjectRunState.Ready, version: 1, currentTaskId: null, projection, ...runOverrides };
   let command: { inputHash: string; response: Record<string, unknown> } | null = null;
   const commands = { findOne: vi.fn(async () => command), create: vi.fn((value) => value), save: vi.fn(async (value) => { command = value; return value; }) };
-  const tasks = { findOne: vi.fn().mockResolvedValue(task), find: vi.fn().mockResolvedValue([task]), save: vi.fn(async (value) => value) };
+  const tasks = { findOne: vi.fn().mockResolvedValue(lockedTask), find: vi.fn().mockResolvedValue([listedTask]), save: vi.fn(async (value) => value) };
   const runs = { findOne: vi.fn().mockResolvedValue(run), save: vi.fn(async (value) => value) };
   const operations = { create: vi.fn((value) => ({ id: '00000000-0000-4000-8000-000000000077', ...value })), save: vi.fn(async (value) => value) };
   const manager = { getRepository: (entity: { name: string }) => entity === ProjectRun ? runs : entity === ProjectTask ? tasks : entity === ProjectRunCommand ? commands : entity === WorkflowOperation ? operations : null };
-  const dataSource = { transaction: vi.fn((callback) => callback(manager)) };
-  return { service: new ProjectRunsService(runs as never, dataSource as never), run, task, runs, tasks, commands, operations };
+  const dataSource = { transaction: vi.fn((callback) => callback(manager)), getRepository: manager.getRepository };
+  return { service: new ProjectRunsService(runs as never, dataSource as never), run, task: lockedTask, listedTask, runs, tasks, commands, operations, dataSource };
 }
 
 describe('ProjectRunsService', () => {
@@ -63,9 +64,55 @@ describe('ProjectRunsService', () => {
     const first = await subject.service.taskCommand(args);
     const replay = await subject.service.taskCommand(args);
     expect(first).toMatchObject({ state: 'ACTIVE', version: 2, currentTaskId: 'task-1' });
+    expect((first.tasks as Array<{ id: string; state: string }>).find((task) => task.id === 'task-1')?.state).toBe('IN_PROGRESS');
+    expect((first.map as { nodes: Array<{ id: string; state: string }> }).nodes.find((node) => node.id === 'task-1')?.state).toBe('IN_PROGRESS');
     expect(replay).toEqual(first);
     expect(subject.tasks.save).toHaveBeenCalledOnce();
     expect(subject.runs.findOne).toHaveBeenCalledWith(expect.objectContaining({ lock: { mode: 'pessimistic_write' } }));
+  });
+
+  it('persists synced projection so get returns IN_PROGRESS after start', async () => {
+    const subject = transitionSubject();
+    await subject.service.taskCommand({ ownerId: 'owner-1', runId: subject.run.id, taskKey: 'task-1', command: 'start', expectedVersion: 1, idempotencyKey: key });
+    const savedRun = subject.runs.save.mock.calls[0]![0] as typeof subject.run;
+    expect(savedRun.projection.tasks.find((task) => task.id === 'task-1')?.state).toBe('IN_PROGRESS');
+    expect(savedRun.projection.state).toBe(ProjectRunState.Active);
+    const queryBuilder = { where: vi.fn(), andWhere: vi.fn(), orderBy: vi.fn(), getOne: vi.fn().mockResolvedValue(null) };
+    for (const method of ['where', 'andWhere', 'orderBy'] as const) queryBuilder[method].mockReturnValue(queryBuilder);
+    const readRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), createQueryBuilder: vi.fn(() => queryBuilder) };
+    subject.dataSource.getRepository = vi.fn(() => readRepo);
+    subject.runs.findOne.mockResolvedValue(savedRun);
+    const projection = await subject.service.get('owner-1', subject.run.id);
+    expect(projection.tasks.find((task) => task.id === 'task-1')?.state).toBe('IN_PROGRESS');
+    expect(projection.state).toBe(ProjectRunState.Active);
+  });
+
+  it.each([
+    ['start', {}, 'IN_PROGRESS', ProjectRunState.Active, { currentTaskId: 'task-1' }],
+    ['defer', { required: false }, 'DEFERRED', ProjectRunState.Completed, { recommendedTaskId: null }],
+    ['block', {}, 'BLOCKED', ProjectRunState.Blocked, { currentTaskId: null }],
+    ['resume', { state: 'DEFERRED', required: false }, 'READY', ProjectRunState.Completed, { recommendedTaskId: 'task-1' }],
+    ['verify', { state: 'IN_PROGRESS' }, 'VERIFYING', ProjectRunState.Active, { currentTaskId: 'task-1' }],
+  ] as const)('projects %s from distinct locked/list rows', async (command, taskOverrides, expectedTaskState, expectedRunState, responseShape) => {
+    const subject = transitionSubject(taskOverrides, command === 'verify' ? { state: ProjectRunState.Active, currentTaskId: 'task-1' } : {});
+    if (command === 'verify') {
+      subject.run.projection.state = ProjectRunState.Active;
+      subject.run.projection.currentTaskId = 'task-1';
+    }
+    const body = command === 'block' ? { reasonCode: 'WAITING_ON_DEPENDENCY', note: 'blocked for test' } : undefined;
+    const result = await subject.service.taskCommand({
+      ownerId: 'owner-1',
+      runId: subject.run.id,
+      taskKey: 'task-1',
+      command,
+      expectedVersion: 1,
+      idempotencyKey: key,
+      ...(body ? { body } : {}),
+    });
+    expect(subject.listedTask.state).toBe(expectedTaskState);
+    expect(result).toMatchObject({ state: expectedRunState, version: 2, ...responseShape });
+    expect((result.tasks as Array<{ id: string; state: string }>).find((task) => task.id === 'task-1')?.state).toBe(expectedTaskState);
+    expect((result.map as { nodes: Array<{ id: string; state: string }> }).nodes.find((node) => node.id === 'task-1')?.state).toBe(expectedTaskState);
   });
 
   it.each([

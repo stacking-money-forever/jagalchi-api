@@ -72,6 +72,7 @@ export class ProjectRunsService {
       if (!task) throw new NotFoundException('Project task is not available');
       const all = await tasks.find({ where: { projectRunId: run.id }, order: { createdAt: 'ASC' } });
       this.apply(run, task, all, args.command, args.body ?? {});
+      this.syncTaskIntoAll(task, all);
       task.version += 1; run.version += 1; this.deriveRunState(run, all); this.project(run, all);
       await tasks.save(task); await runs.save(run);
       let operationId: string | null = null;
@@ -251,6 +252,11 @@ export class ProjectRunsService {
       run.version += 1; run.projection = this.withPublication(run, run.projection.proof?.publication.publicId ?? null, current?.validity === ProofValidity.Invalidated ? 'INVALIDATED' : 'UNPUBLISHED'); await manager.getRepository(ProjectRun).save(run);
       await commands.save(commands.create({ ownerId, route, idempotencyKey, inputHash, response: run.projection as unknown as Record<string, unknown> })); return run.projection;
     });
+  }
+
+  private syncTaskIntoAll(task: ProjectTask, all: ProjectTask[]): void {
+    const slot = all.find((item) => item.id === task.id);
+    if (slot) Object.assign(slot, task);
   }
 
   private apply(run: ProjectRun, task: ProjectTask, all: ProjectTask[], command: TaskCommand, body: Record<string, unknown>): void {
