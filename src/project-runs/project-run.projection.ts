@@ -4,7 +4,7 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TASK_STATES = new Set<ProjectTaskState>(['LOCKED', 'READY', 'IN_PROGRESS', 'BLOCKED', 'DEFERRED', 'VERIFYING', 'DONE']);
 const ROOT_REQUIRED = ['id', 'state', 'version', 'currentTaskId', 'recommendedTaskId', 'plan', 'map', 'tasks', 'proof'] as const;
-const ROOT_OPTIONAL = ['target', 'citations', 'gaps', 'repositoryBinding'] as const;
+const ROOT_OPTIONAL = ['target', 'citations', 'gaps', 'repositoryBinding', 'pendingOperation'] as const;
 const TASK_REQUIRED = ['id', 'title', 'state', 'required', 'milestoneId', 'prerequisiteIds', 'purpose', 'acceptanceCriteria', 'evidenceRequirements'] as const;
 const TASK_OPTIONAL = ['citationIds', 'gapIds', 'verificationFailure'] as const;
 const FACTS_REQUIRED = ['snapshotId', 'verificationLevel', 'provider', 'repositoryId', 'pullNumber', 'headSha', 'observedAt', 'evaluations'] as const;
@@ -34,6 +34,11 @@ const isTaskShape = (item: Record<string, unknown>): boolean => {
 
 const isCitation = (value: unknown): boolean => record(value) && exact(value, ['id', 'label', 'quote']) && id(value.id) && typeof value.label === 'string' && value.label.length > 0 && value.label.length <= 300 && (value.quote === null || (typeof value.quote === 'string' && value.quote.length <= 2000));
 const isGap = (value: unknown): boolean => record(value) && exact(value, ['id', 'description']) && id(value.id) && typeof value.description === 'string' && value.description.length > 0 && value.description.length <= 2000;
+
+const isPendingOperation = (value: unknown): boolean => record(value) && exact(value, ['id', 'kind'])
+  && typeof value.id === 'string' && UUID.test(value.id)
+  && ['TASK_VERIFICATION', 'PROOF_REVERIFICATION', 'PULL_REQUEST_BINDING'].includes(String(value.kind));
+
 const isRepositoryBinding = (value: unknown): boolean => record(value) && exact(value, ['repositoryName', 'pullNumber', 'headSha', 'pullUrl'])
   && (value.repositoryName === null || (typeof value.repositoryName === 'string' && value.repositoryName.length > 0 && value.repositoryName.length <= 255))
   && (value.pullNumber === null || (Number.isInteger(value.pullNumber) && Number(value.pullNumber) > 0))
@@ -53,6 +58,7 @@ export function isProjectRunProjection(value: unknown): value is ProjectRunProje
   if (value.citations !== undefined && (!Array.isArray(value.citations) || value.citations.length > 40 || !value.citations.every(isCitation))) return false;
   if (value.gaps !== undefined && (!Array.isArray(value.gaps) || value.gaps.length > 40 || !value.gaps.every(isGap))) return false;
   if (value.repositoryBinding !== undefined && !isRepositoryBinding(value.repositoryBinding)) return false;
+  if (value.pendingOperation !== undefined && !isPendingOperation(value.pendingOperation)) return false;
   if (!record(value.plan) || !exact(value.plan, ['id', 'schemaVersion']) || !id(value.plan.id) || !Number.isInteger(value.plan.schemaVersion) || Number(value.plan.schemaVersion) < 1) return false;
   if (!record(value.map) || !exact(value.map, ['nodes', 'edges']) || !Array.isArray(value.map.nodes) || value.map.nodes.length > 40 || !Array.isArray(value.map.edges) || value.map.edges.length > 120) return false;
   if (!Array.isArray(value.tasks) || value.tasks.length > 40) return false;
@@ -80,13 +86,25 @@ export function isProjectRunProjection(value: unknown): value is ProjectRunProje
   ) return false;
   if ((typeof value.currentTaskId === 'string' && !taskIds.has(value.currentTaskId)) || (typeof value.recommendedTaskId === 'string' && !taskIds.has(value.recommendedTaskId))) return false;
   if (value.proof === null) return true;
-  if (!record(value.proof) || !(exact(value.proof, ['summary', 'validUntil', 'publication', 'verification']) || exact(value.proof, ['summary', 'validUntil', 'publication', 'verification', 'facts'])) || typeof value.proof.summary !== 'string' || value.proof.summary.length > 2000 || !(value.proof.validUntil === null || iso(value.proof.validUntil))) return false;
-  const publication = value.proof.publication;
-  const verification = value.proof.verification;
-  const baseValid = record(publication) && exact(publication, ['state', 'publicId']) && ['ACTIVE', 'UNPUBLISHED', 'INVALIDATED'].includes(String(publication.state)) && nullableId(publication.publicId)
+  if (!record(value.proof)) return false;
+  const proof = value.proof;
+  const proofKeys = Object.keys(proof);
+  const proofAllowed = new Set(['summary', 'validUntil', 'publication', 'verification', 'facts', 'failedCriteria']);
+  if (!proofKeys.every((key) => proofAllowed.has(key)) || !['summary', 'validUntil', 'publication', 'verification'].every((key) => proofKeys.includes(key)) || typeof proof.summary !== 'string' || proof.summary.length > 2000 || !(proof.validUntil === null || iso(proof.validUntil))) return false;
+  const publication = proof.publication;
+  const verification = proof.verification;
+  if (!record(publication) || !record(verification)) return false;
+  const publicationKeys = Object.keys(publication);
+  const publicationShape = publicationKeys.length === 2 ? ['state', 'publicId'] : publicationKeys.length === 3 && publicationKeys.includes('supersededSnapshotId') ? ['publicId', 'state', 'supersededSnapshotId'] : null;
+  const baseValid = record(publication) && publicationShape && publicationKeys.sort().join() === [...publicationShape].sort().join() && ['ACTIVE', 'UNPUBLISHED', 'INVALIDATED'].includes(String(publication.state)) && nullableId(publication.publicId) && (!('supersededSnapshotId' in publication) || publication.supersededSnapshotId === null || (typeof publication.supersededSnapshotId === 'string' && UUID.test(publication.supersededSnapshotId)))
     && record(verification) && exact(verification, ['state', 'verifiedAt']) && ['PENDING', 'PASS', 'FAIL', 'STALE'].includes(String(verification.state)) && (verification.verifiedAt === null || iso(verification.verifiedAt));
-  if (!baseValid || value.proof.facts === undefined) return baseValid;
-  const facts = value.proof.facts;
+  if (!baseValid) return false;
+  if (proof.failedCriteria !== undefined) {
+    const failed = proof.failedCriteria;
+    if (!Array.isArray(failed) || failed.length > 20 || !failed.every((item) => record(item) && exact(item, ['ruleId', 'type', 'code']) && id(item.ruleId) && ['MERGED_PR', 'BASE_BRANCH', 'CHANGED_PATH', 'NAMED_CHECK'].includes(String(item.type)) && id(item.code))) return false;
+  }
+  if (proof.facts === undefined) return true;
+  const facts = proof.facts;
   if (!record(facts) || !isFactsShape(facts)) return false;
   if (typeof facts.snapshotId !== 'string' || !UUID.test(facts.snapshotId) || !['MACHINE_VERIFIED', 'INDEPENDENTLY_REVIEWED'].includes(String(facts.verificationLevel))
     || !['fixture', 'github'].includes(String(facts.provider)) || typeof facts.repositoryId !== 'string' || !/^[1-9]\d{0,19}$/.test(facts.repositoryId)

@@ -64,7 +64,7 @@ export class ProjectRunsService {
       if (!run) throw new NotFoundException('Project run is not available');
       const concurrentReplay = await commands.findOne({ where: { ownerId: args.ownerId, route, idempotencyKey: args.idempotencyKey } });
       if (concurrentReplay) { if (concurrentReplay.inputHash !== inputHash) this.conflict('IDEMPOTENCY_KEY_REUSED', 'Idempotency key was reused with different input'); return concurrentReplay.response; }
-      if (run.version !== args.expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale');
+      if (run.version !== args.expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale', { currentVersion: run.version });
       if (run.state === ProjectRunState.Archived) this.conflict('RUN_ARCHIVED', 'Project Run is archived');
       const tasks = manager.getRepository(ProjectTask);
       const task = await tasks.findOne({ where: { projectRunId: run.id, taskKey: args.taskKey }, lock: { mode: 'pessimistic_write' } });
@@ -105,7 +105,7 @@ export class ProjectRunsService {
       if (!run) throw new NotFoundException('Project run is not available');
       const concurrentReplay = await commands.findOne({ where: { ownerId, route, idempotencyKey } });
       if (concurrentReplay) { if (concurrentReplay.inputHash !== inputHash) this.conflict('IDEMPOTENCY_KEY_REUSED', 'Idempotency key was reused with different input'); return concurrentReplay.response; }
-      if (run.version !== expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale');
+      if (run.version !== expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale', { currentVersion: run.version });
       if (run.state === ProjectRunState.Archived) this.conflict('RUN_ARCHIVED', 'Project Run is archived');
       run.state = ProjectRunState.Archived; run.currentTaskId = null; run.version += 1;
       run.projection = { ...run.projection, state: ProjectRunState.Archived, currentTaskId: null, version: run.version };
@@ -133,7 +133,7 @@ export class ProjectRunsService {
       await this.requireProofProfile(manager, ownerId);
       const run = await manager.getRepository(ProjectRun).findOne({ where: { id: runId, ownerId }, lock: { mode: 'pessimistic_write' } });
       if (!run) throw new NotFoundException('Project run is not available');
-      if (run.version !== expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale');
+      if (run.version !== expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale', { currentVersion: run.version });
       if (run.state !== ProjectRunState.Completed) this.conflict('RUN_NOT_COMPLETED', 'Only a completed Project Run can be reverified');
       const latest = await manager.getRepository(ProofSnapshot).findOne({ where: { projectRunId: run.id }, order: { createdAt: 'DESC' } });
       if (latest) {
@@ -143,6 +143,56 @@ export class ProjectRunsService {
       const now = new Date(); const operation = await manager.getRepository(WorkflowOperation).save(manager.getRepository(WorkflowOperation).create({ ownerId, route, idempotencyKey, kind: 'PROOF_REVERIFICATION', inputHash, input: { schemaVersion: 1, projectRunId: run.id, runVersion: run.version }, inputSchemaVersion: 1, resultSchemaVersion: 1, state: WorkflowOperationState.Pending, availableAt: now, nextAttemptAt: now, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null, attempts: 0, maxAttempts: 3, errorCode: null, errorMessage: null, failureClass: null, resultType: null, resultId: null, resultHref: null, completedAt: null }));
       const response = { id: operation.id, kind: operation.kind, state: operation.state, version: operation.version ?? 1, result: null, error: null };
       await commands.save(commands.create({ ownerId, route, idempotencyKey, inputHash, response })); return response;
+    });
+  }
+
+
+  async bindPullRequest(
+    ownerId: string,
+    runId: string,
+    expectedVersion: number,
+    idempotencyKey: string,
+    body: { githubRepositoryId: string; pullNumber: number },
+  ): Promise<Record<string, unknown>> {
+    if (!this.dataSource) throw new Error('Project Run command persistence is unavailable');
+    if (this.config?.get<string>('GITHUB_PROVIDER') !== 'fixture') {
+      throw new ServiceUnavailableException({ code: 'VERIFICATION_PROVIDER_UNAVAILABLE', message: 'Pull request binding provider is unavailable' });
+    }
+    const route = `/api/project-runs/${runId}/pull-request`;
+    const inputHash = createHash('sha256').update(canonical({ expectedVersion, githubRepositoryId: body.githubRepositoryId, pullNumber: body.pullNumber })).digest('hex');
+    return this.dataSource.transaction(async (manager) => {
+      const commands = manager.getRepository(ProjectRunCommand);
+      const prior = await commands.findOne({ where: { ownerId, route, idempotencyKey } });
+      if (prior) { if (prior.inputHash !== inputHash) this.conflict('IDEMPOTENCY_KEY_REUSED', 'Idempotency key was reused with different input'); return prior.response; }
+      await this.requireMutationEnabled(manager, ownerId);
+      const runs = manager.getRepository(ProjectRun);
+      const run = await runs.findOne({ where: { id: runId, ownerId }, lock: { mode: 'pessimistic_write' } });
+      if (!run) throw new NotFoundException('Project run is not available');
+      const concurrentReplay = await commands.findOne({ where: { ownerId, route, idempotencyKey } });
+      if (concurrentReplay) { if (concurrentReplay.inputHash !== inputHash) this.conflict('IDEMPOTENCY_KEY_REUSED', 'Idempotency key was reused with different input'); return concurrentReplay.response; }
+      if (run.version !== expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale', { currentVersion: run.version });
+      if (run.state === ProjectRunState.Archived) this.conflict('RUN_ARCHIVED', 'Project Run is archived');
+      const binding = await manager.getRepository(ProjectRepositoryBinding).findOne({ where: { projectRunId: run.id }, lock: { mode: 'pessimistic_read' } });
+      if (!binding?.githubRepositoryId || binding.githubRepositoryId !== body.githubRepositoryId) {
+        this.conflict('RUN_REPOSITORY_MISMATCH', 'The repository does not match the immutable Project Run binding');
+      }
+      if (await this.hasTaskVerificationAttempt(manager, ownerId, run.id)) {
+        this.conflict('PULL_REQUEST_BINDING_LOCKED', 'Pull request binding is locked after the first task verification attempt');
+      }
+      run.version += 1;
+      run.projection = { ...run.projection, version: run.version };
+      await runs.save(run);
+      const now = new Date();
+      const operation = await manager.getRepository(WorkflowOperation).save(manager.getRepository(WorkflowOperation).create({
+        ownerId, route, idempotencyKey, kind: 'PULL_REQUEST_BINDING', inputHash,
+        input: { schemaVersion: 1, projectRunId: run.id, runVersion: run.version, githubRepositoryId: body.githubRepositoryId, pullNumber: body.pullNumber },
+        inputSchemaVersion: 1, resultSchemaVersion: 1,
+        state: WorkflowOperationState.Pending, availableAt: now, nextAttemptAt: now, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null,
+        attempts: 0, maxAttempts: 3, errorCode: null, errorMessage: null, failureClass: null, resultType: null, resultId: null, resultHref: null, completedAt: null,
+      }));
+      const response = { id: operation.id, kind: operation.kind, state: operation.state, version: operation.version ?? 1, result: null, error: null };
+      await commands.save(commands.create({ ownerId, route, idempotencyKey, inputHash, response }));
+      return response;
     });
   }
 
@@ -156,7 +206,7 @@ export class ProjectRunsService {
       await this.requireMutationEnabled(manager, ownerId);
       const run = await manager.getRepository(ProjectRun).findOne({ where: { id: runId, ownerId }, lock: { mode: 'pessimistic_write' } });
       if (!run) throw new NotFoundException('Project run is not available');
-      if (run.version !== expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale');
+      if (run.version !== expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale', { currentVersion: run.version });
       if (run.state === ProjectRunState.Archived) this.conflict('RUN_ARCHIVED', 'Archived Project Runs cannot publish');
       const tasks = await manager.getRepository(ProjectTask).find({ where: { projectRunId: run.id } });
       if (!tasks.filter((task) => task.required).every((task) => task.state === 'DONE')) this.conflict('REQUIRED_TASKS_INCOMPLETE', 'Required tasks are incomplete');
@@ -193,7 +243,7 @@ export class ProjectRunsService {
       const commands = manager.getRepository(ProjectRunCommand); const prior = await commands.findOne({ where: { ownerId, route, idempotencyKey } });
       if (prior) { if (prior.inputHash !== inputHash) this.conflict('IDEMPOTENCY_KEY_REUSED', 'Idempotency key was reused with different input'); return prior.response as unknown as ProjectRunProjection; }
       const run = await manager.getRepository(ProjectRun).findOne({ where: { id: runId, ownerId }, lock: { mode: 'pessimistic_write' } }); if (!run) throw new NotFoundException('Project run is not available');
-      if (run.version !== expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale');
+      if (run.version !== expectedVersion) this.conflict('STALE_VERSION', 'Project Run version is stale', { currentVersion: run.version });
       await this.requireProofProfile(manager, ownerId);
       const current = await manager.getRepository(ProofPublication).findOne({ where: { projectRunId: run.id, validity: Not(ProofValidity.Superseded) }, lock: { mode: 'pessimistic_write' } });
       if (current) { current.publicationStatus = ProofPublicationStatus.Unpublished; current.version += 1; await manager.getRepository(ProofPublication).save(current); }
@@ -230,7 +280,7 @@ export class ProjectRunsService {
     run.projection = { ...run.projection, state: run.state, version: run.version, currentTaskId: run.currentTaskId, recommendedTaskId: tasks.find((task) => task.state === 'READY')?.taskKey ?? null, tasks: run.projection.tasks.map((task) => ({ ...task, state: states.get(task.id) ?? task.state })), map: { ...run.projection.map, nodes: run.projection.map.nodes.map((node) => ({ ...node, state: states.get(node.id) ?? node.state })) } };
     assertProjectRunProjection(run.projection);
   }
-  private focus(run: ProjectRun, task: ProjectTask): void { if (run.currentTaskId && run.currentTaskId !== task.taskKey) this.conflict('FOCUS_TASK_ACTIVE', 'Another Focus task is active'); }
+  private focus(run: ProjectRun, task: ProjectTask): void { if (run.currentTaskId && run.currentTaskId !== task.taskKey) this.conflict('FOCUS_TASK_ACTIVE', 'Another Focus task is active', { currentTaskId: run.currentTaskId }); }
   private async requireMutationEnabled(manager: { getRepository: DataSource['getRepository'] }, ownerId: string): Promise<void> {
     if (!this.config) return;
     if (this.config.get<string>('PROJECT_RUNS_ENABLED') !== 'true') throw new ServiceUnavailableException({ code: 'PROJECT_RUNS_DISABLED', message: 'Project Runs are unavailable' });
@@ -247,7 +297,9 @@ export class ProjectRunsService {
     return profile;
   }
   private invalid(): never { this.conflict('INVALID_TASK_TRANSITION', 'Task transition is not allowed'); }
-  private conflict(code: string, message: string): never { throw new ConflictException({ code, message }); }
+  private conflict(code: string, message: string, details?: Record<string, unknown>): never {
+    throw new ConflictException(details && Object.keys(details).length ? { code, message, details } : { code, message });
+  }
   private withPublication(run: ProjectRun, publicId: string | null, state: 'ACTIVE' | 'UNPUBLISHED' | 'INVALIDATED'): ProjectRunProjection {
     const prior = run.projection.proof; const projection: ProjectRunProjection = { ...run.projection, version: run.version, proof: { summary: prior?.summary ?? 'Machine verification for the current Project Run', validUntil: prior?.validUntil ?? null, publication: { state, publicId }, verification: prior?.verification ?? { state: 'PASS', verifiedAt: null }, ...(prior?.facts ? { facts: prior.facts } : {}) } }; assertProjectRunProjection(projection); return projection;
   }
@@ -265,6 +317,15 @@ export class ProjectRunsService {
       headSha: binding.expectedHeadSha,
       pullUrl: this.pullUrl(binding.repositoryName, binding.pullNumber),
     };
+  }
+
+  private async hasTaskVerificationAttempt(manager: { getRepository: DataSource['getRepository'] }, ownerId: string, projectRunId: string): Promise<boolean> {
+    if (await manager.getRepository(ProjectTask).exists({ where: { projectRunId, state: 'VERIFYING' } })) return true;
+    return manager.getRepository(WorkflowOperation).createQueryBuilder('op')
+      .where('op.owner_id = :ownerId', { ownerId })
+      .andWhere(`op.kind = 'TASK_VERIFICATION'`)
+      .andWhere(`op.input ->> 'projectRunId' = :projectRunId`, { projectRunId })
+      .getExists();
   }
 
   private async ownerProjection(run: ProjectRun): Promise<ProjectRunProjection> {
@@ -297,11 +358,21 @@ export class ProjectRunsService {
       };
     });
     const repositoryBinding = legacy.repositoryBinding ?? this.repositoryBindingView(binding);
+    const pendingOperationRow = await this.dataSource.getRepository(WorkflowOperation).createQueryBuilder('op')
+      .where('op.owner_id = :ownerId', { ownerId: run.ownerId })
+      .andWhere(`op.state IN ('PENDING','RUNNING')`)
+      .andWhere(`op.kind IN ('TASK_VERIFICATION','PROOF_REVERIFICATION','PULL_REQUEST_BINDING')`)
+      .andWhere(`op.input ->> 'projectRunId' = :projectRunId`, { projectRunId: run.id })
+      .orderBy('op.created_at', 'DESC')
+      .getOne();
+    const pendingOperation = pendingOperationRow ? { id: pendingOperationRow.id, kind: pendingOperationRow.kind as 'TASK_VERIFICATION' | 'PROOF_REVERIFICATION' | 'PULL_REQUEST_BINDING' } : undefined;
+    const supersededPublication = await this.dataSource.getRepository(ProofPublication).findOne({ where: { projectRunId: run.id, validity: ProofValidity.Superseded }, order: { updatedAt: 'DESC' } });
     const base = {
       ...legacy,
       ...(legacy.citations === undefined && focus.citations.length ? { citations: focus.citations } : {}),
       ...(legacy.gaps === undefined && focus.gaps.length ? { gaps: focus.gaps } : {}),
       ...(repositoryBinding ? { repositoryBinding } : {}),
+      ...(pendingOperation ? { pendingOperation } : {}),
       tasks: projectedTasks,
     };
     if (!snapshot) {
@@ -331,10 +402,16 @@ export class ProjectRunsService {
         evaluations,
       }
       : undefined;
+    const failedCriteria = evaluations.filter((item) => !item.passed).map((item) => ({ ruleId: item.ruleId, type: item.type, code: item.code }));
     const proof: ProjectRunProjection['proof'] = {
       summary: legacy.proof?.summary ?? 'Machine verification for the current Project Run', validUntil: legacy.proof?.validUntil ?? null,
-      publication: { state: publication?.validity === ProofValidity.Invalidated ? 'INVALIDATED' : publication?.publicationStatus === ProofPublicationStatus.Published ? 'ACTIVE' : 'UNPUBLISHED', publicId: legacy.proof?.publication.publicId ?? profile?.publicId ?? null },
+      publication: {
+        state: publication?.validity === ProofValidity.Invalidated ? 'INVALIDATED' : publication?.publicationStatus === ProofPublicationStatus.Published ? 'ACTIVE' : 'UNPUBLISHED',
+        publicId: legacy.proof?.publication.publicId ?? profile?.publicId ?? null,
+        ...(supersededPublication ? { supersededSnapshotId: supersededPublication.proofSnapshotId } : {}),
+      },
       verification: { state: stale ? 'STALE' : payload.status === 'FAIL' ? 'FAIL' : 'PASS', verifiedAt: snapshot.verifiedAt.toISOString() },
+      ...(failedCriteria.length ? { failedCriteria } : {}),
       ...(facts ? { facts } : {}),
     };
     const projection = { ...base, proof };

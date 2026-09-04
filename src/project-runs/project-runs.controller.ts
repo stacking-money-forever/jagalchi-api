@@ -5,6 +5,7 @@ import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WORKFLOW_RETRY_AFTER_SECONDS } from '../http/workflow-response';
+import { BindProjectRunPullRequestDto } from './project-runs.dto';
 import { ProjectRunsService, type TaskCommand } from './project-runs.service';
 import { ProjectRunState } from './project-run.entity';
 
@@ -61,9 +62,20 @@ class ProjectRunMapDto {
   @ApiProperty({ type: [ProjectRunMapNodeDto], maxItems: 40 }) nodes: ProjectRunMapNodeDto[];
   @ApiProperty({ type: [ProjectRunMapEdgeDto], maxItems: 120 }) edges: ProjectRunMapEdgeDto[];
 }
+
+class ProjectRunPendingOperationDto {
+  @ApiProperty({ format: 'uuid' }) id: string;
+  @ApiProperty({ enum: ['TASK_VERIFICATION', 'PROOF_REVERIFICATION', 'PULL_REQUEST_BINDING'] }) kind: string;
+}
+class ProjectRunProofFailedCriterionDto {
+  @ApiProperty({ type: String, minLength: 1, maxLength: 128 }) ruleId: string;
+  @ApiProperty({ enum: ['MERGED_PR', 'BASE_BRANCH', 'CHANGED_PATH', 'NAMED_CHECK'] }) type: string;
+  @ApiProperty({ type: String, minLength: 1, maxLength: 128 }) code: string;
+}
 class ProjectRunProofPublicationDto {
   @ApiProperty({ type: String, enum: ['ACTIVE', 'UNPUBLISHED', 'INVALIDATED'] }) state: string;
   @ApiProperty({ type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', nullable: true }) publicId: string | null;
+  @ApiProperty({ required: false, format: 'uuid', nullable: true }) supersededSnapshotId?: string | null;
 }
 class ProjectRunProofVerificationDto {
   @ApiProperty({ type: String, enum: ['PENDING', 'PASS', 'FAIL', 'STALE'] }) state: string;
@@ -93,6 +105,7 @@ class ProjectRunProofDto {
   @ApiProperty({ type: String, format: 'date-time', nullable: true }) validUntil: string | null;
   @ApiProperty({ type: ProjectRunProofPublicationDto }) publication: ProjectRunProofPublicationDto;
   @ApiProperty({ type: ProjectRunProofVerificationDto }) verification: ProjectRunProofVerificationDto;
+  @ApiProperty({ required: false, type: [ProjectRunProofFailedCriterionDto], maxItems: 20 }) failedCriteria?: ProjectRunProofFailedCriterionDto[];
   @ApiProperty({ required: false, type: ProjectRunProofFactsDto }) facts?: ProjectRunProofFactsDto;
 }
 export class ProjectRunProjectionDto {
@@ -108,6 +121,7 @@ export class ProjectRunProjectionDto {
   @ApiProperty({ required: false, type: [ProjectRunFocusCitationDto], maxItems: 40 }) citations?: ProjectRunFocusCitationDto[];
   @ApiProperty({ required: false, type: [ProjectRunFocusGapDto], maxItems: 40 }) gaps?: ProjectRunFocusGapDto[];
   @ApiProperty({ required: false, type: ProjectRunRepositoryBindingDto }) repositoryBinding?: ProjectRunRepositoryBindingDto;
+  @ApiProperty({ required: false, type: ProjectRunPendingOperationDto }) pendingOperation?: ProjectRunPendingOperationDto;
   @ApiProperty({ type: ProjectRunProofDto, nullable: true }) proof: ProjectRunProofDto | null;
 }
 
@@ -148,6 +162,9 @@ export class ProjectRunsController {
     const parsed = this.headers(version, key);
     return this.runs.archive(user.id, id, parsed.version, parsed.key);
   }
+
+  @Post(':id/pull-request') @HttpCode(202) @Header('Retry-After', WORKFLOW_RETRY_AFTER_SECONDS)
+  bindPullRequest(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string, @Body() body: BindProjectRunPullRequestDto) { const parsed = this.headers(version, key); return this.runs.bindPullRequest(user.id, id, parsed.version, parsed.key, body); }
 
   @Post(':id/reverify') @HttpCode(202) @Header('Retry-After', WORKFLOW_RETRY_AFTER_SECONDS)
   reverify(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) { const parsed = this.headers(version, key); return this.runs.reverify(user.id, id, parsed.version, parsed.key); }

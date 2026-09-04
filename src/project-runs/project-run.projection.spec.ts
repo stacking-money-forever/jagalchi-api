@@ -27,6 +27,25 @@ describe('ProjectRun projection validation', () => {
     dateOnly.proof = { summary: 'Proof', validUntil: '2026-09-03', publication: { state: 'ACTIVE', publicId: 'proof-1' }, verification: { state: 'PASS', verifiedAt: '2026-09-03' } };
     expect(isProjectRunProjection(dateOnly)).toBe(false);
   });
+  it('accepts pending operations and proof recovery fields', () => {
+    const value = {
+      ...projection(),
+      pendingOperation: { id: '00000000-0000-4000-8000-000000000088', kind: 'PULL_REQUEST_BINDING' },
+      proof: {
+        summary: 'Proof', validUntil: null,
+        publication: { state: 'ACTIVE', publicId: 'proof-1', supersededSnapshotId: '00000000-0000-4000-8000-000000000098' },
+        verification: { state: 'FAIL', verifiedAt: '2026-09-03T10:00:00Z' },
+        failedCriteria: [{ ruleId: 'rule-0', type: 'MERGED_PR', code: 'FAIL' }],
+        facts: {
+          snapshotId: '00000000-0000-4000-8000-000000000099', verificationLevel: 'MACHINE_VERIFIED', provider: 'fixture',
+          repositoryId: '9000001', pullNumber: 17, headSha: 'a'.repeat(40), observedAt: '2026-09-03T10:00:00Z',
+          evaluations: [{ ruleId: 'rule-0', type: 'MERGED_PR', passed: false, code: 'FAIL' }],
+        },
+      },
+    };
+    expect(isProjectRunProjection(value)).toBe(true);
+  });
+
   it('accepts repository binding and focus context', () => {
     const value = {
       ...projection(),

@@ -1773,6 +1773,60 @@
         ]
       }
     },
+    "/api/project-runs/{id}/pull-request": {
+      "post": {
+        "operationId": "ProjectRunsController_bindPullRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "if-match",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindProjectRunPullRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
     "/api/project-runs/{id}/reverify": {
       "post": {
         "operationId": "ProjectRunsController_reverify",
@@ -4447,6 +4501,28 @@
         ],
         "additionalProperties": false
       },
+      "ProjectRunPendingOperationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "TASK_VERIFICATION",
+              "PROOF_REVERIFICATION",
+              "PULL_REQUEST_BINDING"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "additionalProperties": false
+      },
       "ProjectRunProofPublicationDto": {
         "type": "object",
         "properties": {
@@ -4463,6 +4539,11 @@
             "minLength": 1,
             "maxLength": 128,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "nullable": true
+          },
+          "supersededSnapshotId": {
+            "type": "object",
+            "format": "uuid",
             "nullable": true
           }
         },
@@ -4493,6 +4574,36 @@
         "required": [
           "state",
           "verifiedAt"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunProofFailedCriterionDto": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "MERGED_PR",
+              "BASE_BRANCH",
+              "CHANGED_PATH",
+              "NAMED_CHECK"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "ruleId",
+          "type",
+          "code"
         ],
         "additionalProperties": false
       },
@@ -4622,6 +4733,13 @@
           "verification": {
             "$ref": "#/components/schemas/ProjectRunProofVerificationDto"
           },
+          "failedCriteria": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectRunProofFailedCriterionDto"
+            }
+          },
           "facts": {
             "$ref": "#/components/schemas/ProjectRunProofFactsDto"
           }
@@ -4702,6 +4820,9 @@
           "repositoryBinding": {
             "$ref": "#/components/schemas/ProjectRunRepositoryBindingDto"
           },
+          "pendingOperation": {
+            "$ref": "#/components/schemas/ProjectRunPendingOperationDto"
+          },
           "proof": {
             "nullable": true,
             "type": "object",
@@ -4722,6 +4843,24 @@
           "map",
           "tasks",
           "proof"
+        ],
+        "additionalProperties": false
+      },
+      "BindProjectRunPullRequestDto": {
+        "type": "object",
+        "properties": {
+          "githubRepositoryId": {
+            "type": "string",
+            "pattern": "^[1-9]\\d{0,19}$"
+          },
+          "pullNumber": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "githubRepositoryId",
+          "pullNumber"
         ],
         "additionalProperties": false
       },

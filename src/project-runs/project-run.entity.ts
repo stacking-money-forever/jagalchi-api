@@ -44,10 +44,12 @@ export interface ProjectRunProjection {
   citations?: ProjectRunFocusCitation[];
   gaps?: ProjectRunFocusGap[];
   repositoryBinding?: ProjectRunRepositoryBinding;
+  pendingOperation?: { id: string; kind: 'TASK_VERIFICATION' | 'PROOF_REVERIFICATION' | 'PULL_REQUEST_BINDING' };
   proof: {
     summary: string; validUntil: string | null;
-    publication: { state: 'ACTIVE' | 'UNPUBLISHED' | 'INVALIDATED'; publicId: string | null };
+    publication: { state: 'ACTIVE' | 'UNPUBLISHED' | 'INVALIDATED'; publicId: string | null; supersededSnapshotId?: string | null };
     verification: { state: 'PENDING' | 'PASS' | 'FAIL' | 'STALE'; verifiedAt: string | null };
+    failedCriteria?: Array<{ ruleId: string; type: 'MERGED_PR' | 'BASE_BRANCH' | 'CHANGED_PATH' | 'NAMED_CHECK'; code: string }>;
     facts?: {
       snapshotId: string; verificationLevel: 'MACHINE_VERIFIED' | 'INDEPENDENTLY_REVIEWED'; provider: 'fixture' | 'github';
       repositoryId: string; repositoryName?: string; pullNumber: number; headSha: string; observedAt: string;

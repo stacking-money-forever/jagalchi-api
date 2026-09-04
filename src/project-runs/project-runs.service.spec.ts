@@ -4,7 +4,7 @@ import { ProjectRunState } from './project-run.entity';
 import { ProjectRunsService } from './project-runs.service';
 import { WorkflowOperation, WorkflowOperationState } from '../workflow-operations/workflow-operation.entities';
 import { ProjectRun } from './project-run.entity';
-import { ProjectFeatureEntitlement, ProjectRunCommand, ProjectTask, ProofPublication, ProofPublicationStatus, ProofSnapshot, ProofValidity } from './product-spine.entities';
+import { ProjectFeatureEntitlement, ProjectRepositoryBinding, ProjectRunCommand, ProjectTask, ProofPublication, ProofPublicationStatus, ProofSnapshot, ProofValidity } from './product-spine.entities';
 import { ProofProfile, ProofProfileState } from '../career/career.entities';
 
 const key = '00000000-0000-4000-8000-000000000099';
@@ -80,10 +80,10 @@ describe('ProjectRunsService', () => {
   it('rejects stale versions and a second focus task', async () => {
     const stale = transitionSubject();
     await expect(stale.service.taskCommand({ ownerId: 'owner-1', runId: stale.run.id, taskKey: 'task-1', command: 'start', expectedVersion: 2, idempotencyKey: key }))
-      .rejects.toMatchObject({ response: { code: 'STALE_VERSION' } });
+      .rejects.toMatchObject({ response: { code: 'STALE_VERSION', details: { currentVersion: 1 } } });
     const focused = transitionSubject({}, { currentTaskId: 'task-other' });
     await expect(focused.service.taskCommand({ ownerId: 'owner-1', runId: focused.run.id, taskKey: 'task-1', command: 'start', expectedVersion: 1, idempotencyKey: key }))
-      .rejects.toMatchObject({ response: { code: 'FOCUS_TASK_ACTIVE' } });
+      .rejects.toMatchObject({ response: { code: 'FOCUS_TASK_ACTIVE', details: { currentTaskId: 'task-other' } } });
   });
 
   it('moves verification to VERIFYING and creates a durable operation without faking PASS', async () => {
@@ -134,4 +134,47 @@ describe('ProjectRunsService', () => {
     expect(result).toMatchObject({ kind: 'PROOF_REVERIFICATION', state: WorkflowOperationState.Pending });
     expect(run.version).toBe(5);
   });
+
+  it('enqueues pull request binding before the first task verification attempt', async () => {
+    const runId = '00000000-0000-4000-8000-000000000001';
+    const projection = { id: runId, state: ProjectRunState.Ready, version: 1, currentTaskId: null, recommendedTaskId: 'task-1', plan: { id: 'plan-1', schemaVersion: 1 }, map: { nodes: [], edges: [] }, tasks: [], proof: null };
+    const run = { id: runId, ownerId: 'owner-1', state: ProjectRunState.Ready, version: 1, projection };
+    const binding = { projectRunId: runId, githubRepositoryId: '9000001', bindingVersion: 1, pullNumber: null, expectedHeadSha: null };
+    const commands = { findOne: vi.fn().mockResolvedValue(null), create: vi.fn((value) => value), save: vi.fn(async (value) => value) };
+    const runs = { findOne: vi.fn().mockResolvedValue(run), save: vi.fn(async (value) => value) };
+    const bindings = { findOne: vi.fn().mockResolvedValue(binding) };
+    const entitlements = { exists: vi.fn().mockResolvedValue(true) };
+    const operations = { create: vi.fn((value) => ({ id: '00000000-0000-4000-8000-000000000088', version: 1, ...value })), save: vi.fn(async (value) => value) };
+    const tasks = { exists: vi.fn().mockResolvedValue(false) };
+    const qb = { where: vi.fn(), andWhere: vi.fn(), getExists: vi.fn().mockResolvedValue(false) };
+    for (const method of ['where', 'andWhere'] as const) qb[method].mockReturnValue(qb);
+    const workflowOps = { createQueryBuilder: vi.fn(() => qb) };
+    const manager = { getRepository: (entity: { name: string }) => entity === ProjectRun ? runs : entity === ProjectRunCommand ? commands : entity === ProjectRepositoryBinding ? bindings : entity === ProjectFeatureEntitlement ? entitlements : entity === WorkflowOperation ? { ...operations, createQueryBuilder: workflowOps.createQueryBuilder } : entity === ProjectTask ? tasks : null };
+    const dataSource = { transaction: vi.fn((callback) => callback(manager)) };
+    const config = { get: vi.fn((name: string) => name === 'GITHUB_PROVIDER' ? 'fixture' : name === 'PROJECT_RUNS_ENABLED' ? 'true' : undefined) };
+    const result = await new ProjectRunsService(runs as never, dataSource as never, config as never).bindPullRequest('owner-1', runId, 1, key, { githubRepositoryId: '9000001', pullNumber: 17 });
+    expect(result).toMatchObject({ kind: 'PULL_REQUEST_BINDING', state: WorkflowOperationState.Pending });
+    expect(run.version).toBe(2);
+  });
+
+  it('rejects pull request binding after a task verification attempt exists', async () => {
+    const runId = '00000000-0000-4000-8000-000000000001';
+    const projection = { id: runId, state: ProjectRunState.Active, version: 2, currentTaskId: 'task-1', recommendedTaskId: null, plan: { id: 'plan-1', schemaVersion: 1 }, map: { nodes: [], edges: [] }, tasks: [], proof: null };
+    const run = { id: runId, ownerId: 'owner-1', state: ProjectRunState.Active, version: 2, projection };
+    const binding = { projectRunId: runId, githubRepositoryId: '9000001', bindingVersion: 1 };
+    const commands = { findOne: vi.fn().mockResolvedValue(null) };
+    const runs = { findOne: vi.fn().mockResolvedValue(run) };
+    const bindings = { findOne: vi.fn().mockResolvedValue(binding) };
+    const entitlements = { exists: vi.fn().mockResolvedValue(true) };
+    const tasks = { exists: vi.fn().mockResolvedValue(false) };
+    const qb = { where: vi.fn(), andWhere: vi.fn(), getExists: vi.fn().mockResolvedValue(true) };
+    for (const method of ['where', 'andWhere'] as const) qb[method].mockReturnValue(qb);
+    const workflowOps = { createQueryBuilder: vi.fn(() => qb) };
+    const manager = { getRepository: (entity: { name: string }) => entity === ProjectRun ? runs : entity === ProjectRunCommand ? commands : entity === ProjectRepositoryBinding ? bindings : entity === ProjectFeatureEntitlement ? entitlements : entity === WorkflowOperation ? { createQueryBuilder: workflowOps.createQueryBuilder } : entity === ProjectTask ? tasks : null };
+    const dataSource = { transaction: vi.fn((callback) => callback(manager)) };
+    const config = { get: vi.fn((name: string) => name === 'GITHUB_PROVIDER' ? 'fixture' : name === 'PROJECT_RUNS_ENABLED' ? 'true' : undefined) };
+    await expect(new ProjectRunsService(runs as never, dataSource as never, config as never).bindPullRequest('owner-1', runId, 2, key, { githubRepositoryId: '9000001', pullNumber: 17 }))
+      .rejects.toMatchObject({ response: { code: 'PULL_REQUEST_BINDING_LOCKED' } });
+  });
+
 });
