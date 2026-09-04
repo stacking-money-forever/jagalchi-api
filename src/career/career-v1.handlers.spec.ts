@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AiContractInvalidError } from '../workflow-operations/ai-workflow.handlers';
 import { CareerV1WorkflowHandlers } from './career-v1.handlers';
+import type { CandidateProfileSnapshot, CareerDiffSnapshot, CareerTargetVersion } from '../project-runs/product-spine.entities';
 
 const diff = { payload: { missing: ['typescript'] } };
 const ai = { citations: [{ id: 'source-1' }] };
@@ -31,5 +32,33 @@ describe('CareerV1 plan semantic boundary', () => {
     expect(() => qualify([proposal(1), proposal(2), proposal(3, { projectBlueprintId: 'blueprint-2' })], catalog, new Set(['gap-1']), new Set(['source-1']))).toThrow('Exactly three distinct eligible proposals');
     expect(() => qualify([proposal(1), proposal(2), proposal(3, { rejectionReasons: [] })], catalog, new Set(['gap-1']), new Set(['source-1']))).toThrow('Exactly three distinct eligible proposals');
     expect(() => qualify([proposal(1, { citedGapIds: [] }), proposal(2), proposal(3)], catalog, new Set(['gap-1']), new Set(['source-1']))).toThrow('Exactly three distinct eligible proposals');
+  });
+
+  it('accepts interpret-grounded proposal citations through validatePlan', () => {
+    const validate = CareerV1WorkflowHandlers.prototype['validatePlan'].bind(CareerV1WorkflowHandlers.prototype);
+    const targetVersion = { payload: { citations: [{ id: 'source-1', title: 'Manual role', quote: 'Manual text' }] } } as CareerTargetVersion;
+    const groundedDiff = {
+      payload: {
+        missing: [{ id: 'gap-1', description: 'typescript' }],
+        citations: [{ id: 'source-1', title: 'Manual role', quote: 'Manual text' }, { id: 'repo-1', title: 'fixture/verification-repository' }],
+      },
+    } as CareerDiffSnapshot;
+    const profile = {
+      payload: {
+        interpretation: {
+          result: { findings: [{ statement: 'Fixture repository is available', confidence: 1, citationIds: ['repo-1'] }], gaps: [] },
+          citations: [{ id: 'repo-1', title: 'fixture/verification-repository', url: 'https://github.com/fixture/verification-repository', quote: 'Repository available.' }],
+        },
+      },
+    } as CandidateProfileSnapshot;
+    const tasks = validate(
+      { tasks: [{ id: 'task-1', title: 'Ship', milestoneId: 'm-1', prerequisiteIds: [], required: true, purpose: 'Ship', acceptanceCriteria: ['Pass'], evidenceRules: ['test:unit'], citationIds: ['repo-1'], gapIds: ['gap-1'] }] },
+      { citations: [] },
+      groundedDiff,
+      targetVersion,
+      { payload: { citedGapIds: ['gap-1'], citationIds: ['repo-1'] } },
+      profile,
+    );
+    expect(tasks[0]?.citationIds).toEqual(['repo-1']);
   });
 });

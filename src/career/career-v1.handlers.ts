@@ -20,6 +20,7 @@ import { WorkflowOperation, WorkflowOperationResult, WorkflowOperationState } fr
 import { AiContractInvalidError } from '../workflow-operations/ai-workflow.handlers';
 import { assertAiServiceOk, normalizeAiReceipt, normalizePlanMilestones, resolveCompiledFirstAction } from '../ai/ai-service-response';
 import { RetryableWorkflowError } from '../workflow-operations/workflow-runtime';
+import { buildProposalFindings, collectWaveBCitationIds, collectWaveBCitationRecords, normalizeExtractCitations } from './career-v1.citations';
 
 export const CAREER_V1_FAULT_INJECTOR = Symbol('CAREER_V1_FAULT_INJECTOR');
 export type CareerV1FaultInjector = (point: 'AFTER_DOMAIN' | 'AFTER_RESULT') => void | Promise<void>;
@@ -75,7 +76,8 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
       const extracted = ai.result as { company: string; role: string; requirements: Array<Record<string, unknown>> };
       const targets = manager.getRepository(CareerTarget);
       const target = await targets.save(targets.create({ userId: operation.ownerId, company: extracted.company, role: extracted.role, postingUrl: capture.provenance.finalUrl ?? capture.provenance.requestedUrl, requirements: extracted.requirements.map((item) => String(item.text)).join('\n'), competencySlugs: ['typescript'] }));
-      const version = await versions.save(versions.create({ ownerId: operation.ownerId, careerTargetId: target.id, version: 1, sourceHash: capture.sourceHash, captureStatus: capture.provenance.mode === 'FETCHED_URL' ? 'AUTOMATIC' : 'DEGRADED_MANUAL_CAPTURE', schemaVersion: 1, payload: { capture, extraction: ai, requirements: extracted.requirements, citations: (ai.citations as unknown[]) ?? [] } }));
+      const citations = normalizeExtractCitations(ai, capture);
+      const version = await versions.save(versions.create({ ownerId: operation.ownerId, careerTargetId: target.id, version: 1, sourceHash: capture.sourceHash, captureStatus: capture.provenance.mode === 'FETCHED_URL' ? 'AUTOMATIC' : 'DEGRADED_MANUAL_CAPTURE', schemaVersion: 1, payload: { capture, extraction: ai, requirements: extracted.requirements, citations } }));
       return this.resource('CAREER_TARGET_VERSION', version.id, `/api/career/target-versions/${version.id}`);
     });
   }
@@ -104,8 +106,14 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
   private async proposal(operation: WorkflowOperation, signal: AbortSignal) {
     const diff = await this.diffs.findOne({ where: { id: String(operation.input.careerDiffSnapshotId), ownerId: operation.ownerId, state: SnapshotState.Confirmed } });
     if (!diff) throw Object.assign(new Error('Confirmed diff is unavailable'), { code: 'SNAPSHOT_NOT_CONFIRMED' });
+    const [targetVersion, profile] = await Promise.all([
+      this.targetVersions.findOne({ where: { id: diff.careerTargetVersionId, ownerId: operation.ownerId } }),
+      this.profiles.findOne({ where: { id: diff.candidateProfileSnapshotId, ownerId: operation.ownerId, state: SnapshotState.Confirmed } }),
+    ]);
+    const citationIds = collectWaveBCitationIds(targetVersion, diff, profile);
+    const fallbackCitationIds = [...citationIds];
+    const findings = buildProposalFindings(profile, fallbackCitationIds);
     const missing = Array.isArray(diff.payload.missing) ? diff.payload.missing : [];
-    const findings = [{ id: 'finding-1', statement: 'Use confirmed candidate evidence', citationIds: ['source-1'] }];
     const gaps = (missing.length ? missing : ['typescript']).map((value, index) => ({ id: typeof value === 'object' && value && typeof value.id === 'string' ? value.id : `gap-${index + 1}`, description: typeof value === 'string' ? value : JSON.stringify(value) }));
     const catalog = await this.blueprints.find({ where: { catalogVersion: 'v1' }, order: { blueprintKey: 'ASC', version: 'ASC' } });
     if (catalog.length < 3) throw Object.assign(new Error('Blueprint catalog is incomplete'), { code: 'INSUFFICIENT_QUALIFIED_PROPOSALS' });
@@ -114,7 +122,7 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
       constraints: catalog.map((entry) => `Use eligible blueprint ${entry.blueprintKey}@${entry.version}`),
     });
     const result = ai.result as { proposals?: Array<Record<string, unknown>> };
-    this.qualifyProposals(result.proposals, catalog, new Set(gaps.map(({ id }) => id)), new Set(findings.flatMap(({ citationIds }) => citationIds)));
+    this.qualifyProposals(result.proposals, catalog, new Set(gaps.map(({ id }) => id)), citationIds);
     return this.complete(operation, signal, async (manager) => {
       const sets = manager.getRepository(ProjectProposalSet); const proposals = manager.getRepository(ProjectProposal);
       const replay = await sets.createQueryBuilder('proposalSet').where(`proposalSet.payload ->> 'operationId' = :operationId`, { operationId: operation.id }).getOne();
@@ -122,7 +130,7 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
       const currentDiff = await manager.getRepository(CareerDiffSnapshot).findOne({ where: { id: diff.id, ownerId: operation.ownerId, state: SnapshotState.Confirmed }, lock: { mode: 'pessimistic_read' } });
       if (!currentDiff) throw Object.assign(new Error('Confirmed diff is unavailable'), { code: 'SNAPSHOT_NOT_CONFIRMED' });
       const currentCatalog = await manager.getRepository(ProjectBlueprintVersion).find({ where: { catalogVersion: 'v1' }, order: { blueprintKey: 'ASC', version: 'ASC' } });
-      const persisted = this.qualifyProposals(result.proposals, currentCatalog, new Set(gaps.map(({ id }) => id)), new Set(findings.flatMap(({ citationIds }) => citationIds)));
+      const persisted = this.qualifyProposals(result.proposals, currentCatalog, new Set(gaps.map(({ id }) => id)), citationIds);
       const stored = await sets.save(sets.create({ ownerId: operation.ownerId, careerDiffSnapshotId: diff.id, schemaVersion: 1, payload: { operationId: operation.id, receipt: ai.receipt } }));
       await proposals.save(persisted.map(({ payload, blueprint }, index) => proposals.create({ proposalSetId: stored.id, blueprintVersionId: blueprint.id, rank: index + 1, payload: { ...payload, careerDiffSnapshotId: diff.id } })));
       return this.resource('PROJECT_PROPOSAL_SET', stored.id, `/api/career/project-proposal-sets/${stored.id}`);
@@ -144,7 +152,7 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
     const ai = await this.ai(operation, signal, 'COMPILE', AI_V1_ENDPOINTS.projectPlan, 'project-plan.response.schema.json', { title: String(proposal.payload.title ?? 'Project plan'), proposals: all.map(({ payload }) => Object.fromEntries(proposalFields.map((field) => [field, payload[field]]))), selectedProposalId: proposal.payload.id, target: 'project_run' });
     const artifact = (ai.result as { artifact: Record<string, unknown> }).artifact;
     if (artifact.projectBlueprintId !== proposal.payload.projectBlueprintId || artifact.projectBlueprintVersion !== proposal.payload.projectBlueprintVersion) throw new AiContractInvalidError('$.result.artifact.projectBlueprintId');
-    const tasks = this.validatePlan(artifact, ai, diff, targetVersion, proposal);
+    const tasks = this.validatePlan(artifact, ai, diff, targetVersion, proposal, profile);
     const focus = buildFocusContext(null, diff, targetVersion);
     const taskIds = new Set(tasks.map((task) => task.id));
     const recommendedTaskId = resolveCompiledFirstAction(artifact, taskIds, tasks.find((task) => task.state === 'READY')?.id ?? null);
@@ -189,16 +197,17 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
     });
   }
 
-  private validatePlan(artifact: Record<string, unknown>, ai: Record<string, unknown>, diff: CareerDiffSnapshot, targetVersion?: CareerTargetVersion | null, selectedProposal?: ProjectProposal | null) {
+  private validatePlan(artifact: Record<string, unknown>, ai: Record<string, unknown>, diff: CareerDiffSnapshot, targetVersion?: CareerTargetVersion | null, selectedProposal?: ProjectProposal | null, profile?: CandidateProfileSnapshot | null) {
     if (!Array.isArray(artifact.tasks)) throw new AiContractInvalidError('$.result.artifact.tasks');
     const rows = artifact.tasks as Array<Record<string, unknown>>;
     const ids = new Set(rows.map((task) => String(task.id)));
     const visiting = new Set<string>(); const visited = new Set<string>();
     const visit = (id: string): void => { if (visiting.has(id)) throw new AiContractInvalidError('$.result.artifact.tasks.cycle'); if (visited.has(id)) return; visiting.add(id); const task = rows.find((row) => row.id === id)!; for (const dep of task.prerequisiteIds as string[]) { if (!ids.has(dep)) throw new AiContractInvalidError('$.result.artifact.tasks.prerequisiteIds'); visit(dep); } visiting.delete(id); visited.add(id); };
     for (const id of ids) visit(id);
-    const versionCitations = targetVersion && Array.isArray(targetVersion.payload.citations) ? targetVersion.payload.citations as Array<{ id?: unknown }> : [];
-    const targetCitations = [...versionCitations, ...(Array.isArray(diff.payload.citations) ? diff.payload.citations as Array<{ id?: unknown }> : [])];
-    const citationIds = new Set([...(ai.citations as Array<{ id: string }>).map(({ id }) => id), ...targetCitations.map(({ id }) => String(id))]);
+    const citationIds = new Set([
+      ...(ai.citations as Array<{ id: string }>).map(({ id }) => id),
+      ...collectWaveBCitationRecords(targetVersion, diff, profile).map((item) => String(item.id)),
+    ]);
     const missing = Array.isArray(diff.payload.missing) ? diff.payload.missing : [];
     const missingIds = new Set(missing.map((item, index) => (item && typeof item === 'object' && typeof item.id === 'string' ? item.id : `gap-${index + 1}`)));
     const proposedGaps = Array.isArray(selectedProposal?.payload?.citedGapIds) ? selectedProposal.payload.citedGapIds as unknown[] : [];

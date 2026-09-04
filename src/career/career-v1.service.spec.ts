@@ -75,4 +75,14 @@ describe('CareerV1Service intake boundary', () => {
       { repositoryId: '9000001', name: 'verification-repository', fullName: 'fixture/verification-repository', private: true },
     ]);
   });
+
+  it('merges interpret citations into diff snapshots when creating the Wave B diff', async () => {
+    const target = { id: 'version-1', ownerId: 'owner-1', careerTargetId: 'target-1', payload: { requirements: [{ id: 'requirement-1' }], citations: [{ id: 'source-1', title: 'Manual role', quote: 'Manual text' }] } };
+    const profile = { id: 'profile-1', ownerId: 'owner-1', state: SnapshotState.Confirmed, payload: { interpretation: { citations: [{ id: 'repo-1', title: 'fixture/verification-repository' }], result: { findings: [{ statement: 'Repo available', confidence: 1, citationIds: ['repo-1'] }], gaps: [] } } } };
+    const diffs = { findOne: vi.fn(), create: vi.fn((value) => value), save: vi.fn(async (value) => value) };
+    const commands = { findOne: vi.fn().mockResolvedValue(null), create: vi.fn((value) => value), save: vi.fn(async (value) => value) };
+    const service = new CareerV1Service({ get: vi.fn(() => 'true') } as never, { createOrReplay: vi.fn() } as never, { exists: vi.fn().mockResolvedValue(true) } as never, { findOne: vi.fn().mockResolvedValue(target) } as never, { findOne: vi.fn().mockResolvedValue(profile) } as never, diffs as never, {} as never, {} as never, commands as never, { find: vi.fn() } as never, { find: vi.fn() } as never);
+    const result = await service.createDiff('owner-1', 'target-1', '00000000-0000-4000-8000-000000000099', { careerTargetVersionId: 'version-1', candidateProfileSnapshotId: 'profile-1' });
+    expect((result.payload as { citations: Array<{ id: string }> }).citations.map((item) => item.id)).toEqual(['source-1', 'repo-1']);
+  });
 });

@@ -1,4 +1,5 @@
 import type { CareerDiffSnapshot, CareerTargetVersion, ProjectPlanSnapshot } from './product-spine.entities';
+import { DETERMINISTIC_SOURCE_CITATION_ID } from '../career/career-v1.citations';
 
 export interface FocusCitation {
   id: string;
@@ -52,7 +53,9 @@ export function buildFocusContext(
   if (diff && Array.isArray(diff.payload.citations)) {
     diff.payload.citations.forEach((item, index) => ingestCitation(item, `diff-source-${index + 1}`));
   }
-  ingestCitation({ id: 'source-1', label: 'Confirmed requirement evidence', quote: null }, 'source-1');
+  if (!citations.has(DETERMINISTIC_SOURCE_CITATION_ID)) {
+    ingestCitation({ id: DETERMINISTIC_SOURCE_CITATION_ID, label: 'Confirmed requirement evidence', quote: null }, DETERMINISTIC_SOURCE_CITATION_ID);
+  }
 
   // Focus gaps are sourced from confirmed Career Diff `missing` only. Interpret `result.gaps` strings stay on the profile snapshot and are intentionally not merged here.
   const missing = diff && Array.isArray(diff.payload.missing) ? diff.payload.missing : [];

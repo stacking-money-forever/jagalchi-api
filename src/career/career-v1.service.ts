@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, MoreThan, Repository } from 'typeorm';
 import { createHash } from 'node:crypto';
 import { FIXTURE_JOB_URL, LIVE_JOB_SOURCE_HOSTS, validateJobSourceUrl, validateManualCapture } from '../job-sources';
+import { collectDiffCitationPayload } from './career-v1.citations';
 import { CareerTargetVersion, CandidateProfileSnapshot, CareerDiffSnapshot, ProjectFeature, ProjectFeatureEntitlement, ProjectProposal, ProjectProposalSet, ProjectRunCommand, SnapshotState } from '../project-runs/product-spine.entities';
 import { GithubInstallation, GithubInstallationRepository, GithubInstallationStatus } from '../github/github.entities';
 import { WorkflowOperationService } from '../workflow-operations/workflow-operation.service';
@@ -125,7 +126,7 @@ export class CareerV1Service {
     const target = await this.targetVersions.findOne({ where: { id: body.careerTargetVersionId, ownerId, careerTargetId: targetId } });
     const profile = await this.profiles.findOne({ where: { id: body.candidateProfileSnapshotId, ownerId, state: SnapshotState.Confirmed } });
     if (!target || !profile) throw new NotFoundException('Confirmed snapshot inputs are not available');
-    const result = await this.diffs.save(this.diffs.create({ ownerId, careerTargetId: targetId, careerTargetVersionId: target.id, candidateProfileSnapshotId: profile.id, state: SnapshotState.Draft, sourceSnapshotId: null, schemaVersion: 1, payload: { observed: [], inferred: [], missing: target.payload.requirements ?? [], citations: target.payload.citations ?? [] } }));
+    const result = await this.diffs.save(this.diffs.create({ ownerId, careerTargetId: targetId, careerTargetVersionId: target.id, candidateProfileSnapshotId: profile.id, state: SnapshotState.Draft, sourceSnapshotId: null, schemaVersion: 1, payload: { observed: [], inferred: [], missing: target.payload.requirements ?? [], citations: collectDiffCitationPayload(target.payload as Record<string, unknown>, profile) } }));
     await this.remember(ownerId, route, key, body, result as unknown as Record<string, unknown>); return result;
   }
 
