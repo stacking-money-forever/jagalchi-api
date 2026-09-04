@@ -204,5 +204,23 @@ describe('WorkflowOperationService', () => {
     await expect(service.requestCancelVersioned('operation-1', 'owner-1', 1, '00000000-0000-4000-8000-000000000099'))
       .rejects.toMatchObject({ response: { code: 'STALE_VERSION', details: { currentVersion: 3 } } });
   });
+  it('reads the newest worker heartbeat without TypeORM findOne order-only queries', async () => {
+    const newest = new Date('2026-09-04T00:00:00Z');
+    const workerHeartbeats = {
+      find: vi.fn().mockResolvedValue([{ heartbeatAt: newest }]),
+    };
+    const service = new WorkflowOperationService(
+      {} as never,
+      {} as never,
+      {} as never,
+      workerHeartbeats as never,
+    );
+
+    await expect(service.latestWorkerHeartbeat()).resolves.toEqual(newest);
+    expect(workerHeartbeats.find).toHaveBeenCalledWith({
+      order: { heartbeatAt: 'DESC' },
+      take: 1,
+    });
+  });
 });
 

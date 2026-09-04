@@ -347,7 +347,10 @@ export class WorkflowOperationService {
 
   async latestWorkerHeartbeat(): Promise<Date | null> {
     if (!this.workerHeartbeats) return null;
-    const row = await this.workerHeartbeats.findOne({ order: { heartbeatAt: 'DESC' } });
+    const [row] = await this.workerHeartbeats.find({
+      order: { heartbeatAt: 'DESC' },
+      take: 1,
+    });
     return row?.heartbeatAt ?? null;
   }
 
