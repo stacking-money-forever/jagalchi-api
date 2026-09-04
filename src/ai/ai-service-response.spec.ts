@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { AiSemanticError, assertAiServiceOk, resolveCompiledFirstAction } from './ai-service-response';
-import { RetryableWorkflowError } from '../workflow-operations/workflow-runtime';
-
 describe('assertAiServiceOk', () => {
   it('preserves semantic 422 AI codes', async () => {
     const response = new Response(JSON.stringify({ code: 'AI_PLAN_MALFORMED', message: 'Plan artifact is invalid' }), { status: 422 });

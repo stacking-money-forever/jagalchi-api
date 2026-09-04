@@ -207,7 +207,7 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
     const gapIds = requiredGaps.size > 0 ? requiredGaps : missingIds;
     const covered = new Set<string>();
     const readyTaskId = resolveCompiledFirstAction(artifact, ids, rows[0] ? String(rows[0].id) : null);
-    const normalized = rows.map((task, index) => {
+    const normalized = rows.map((task) => {
       const citations = task.citationIds as string[]; const gaps = task.gapIds as string[];
       if (typeof task.required !== 'boolean') throw new AiContractInvalidError('$.result.artifact.tasks.required');
       if (citations.length === 0 || !citations.every((id) => citationIds.has(id)) || !gaps.every((id) => gapIds.has(id))) throw new AiContractInvalidError('$.result.artifact.tasks.references');
