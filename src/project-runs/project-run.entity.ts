@@ -17,6 +17,24 @@ export interface ProjectRunFocusCitation {
   quote: string | null;
 }
 
+export interface ProjectRunAiReceipt {
+  provider: string;
+  model: string;
+  promptVersion: string;
+  inputHash: string;
+  generatedAt: string;
+}
+
+export interface ProjectRunPlanProvenance {
+  compileReceipt?: ProjectRunAiReceipt;
+  proposalReceipt?: ProjectRunAiReceipt;
+}
+
+export interface ProjectRunMilestone {
+  id: string;
+  title: string;
+}
+
 export interface ProjectRunFocusGap {
   id: string;
   description: string;
@@ -29,7 +47,8 @@ export interface ProjectRunProjection {
   target?: { company: string; role: string };
   currentTaskId: string | null;
   recommendedTaskId: string | null;
-  plan: { id: string; schemaVersion: number };
+  plan: { id: string; schemaVersion: number; provenance?: ProjectRunPlanProvenance };
+  milestones?: ProjectRunMilestone[];
   map: {
     nodes: Array<{ id: string; title: string; milestoneId: string | null; state: ProjectTaskState }>;
     edges: Array<{ id: string; source: string; target: string; kind: 'PREREQUISITE' | 'SEQUENCE' }>;

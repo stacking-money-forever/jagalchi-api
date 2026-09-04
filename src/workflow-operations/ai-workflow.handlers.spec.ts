@@ -83,6 +83,15 @@ describe('AiWorkflowHandlers canonical response validation', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('preserves semantic AI 422 codes instead of collapsing them', async () => {
+    const subject = setup(responses.PROJECT_PLAN!);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 422, json: async () => ({ code: 'AI_PROPOSALS_GAPS_UNCOVERED', message: 'gaps uncovered' }) }));
+    const { AiSemanticError } = await import('../ai/ai-service-response');
+    await expect(subject.registry.get('PROJECT_PLAN')!(operation('PROJECT_PLAN'), new AbortController().signal))
+      .rejects.toBeInstanceOf(AiSemanticError);
+    expect(subject.orchestration.createProjectRun).not.toHaveBeenCalled();
+  });
+
   it('classifies transient AI responses and network failures as retryable', async () => {
     const subject = setup(responses.PROJECT_PLAN!);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }));

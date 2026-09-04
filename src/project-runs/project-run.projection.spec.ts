@@ -46,6 +46,24 @@ describe('ProjectRun projection validation', () => {
     expect(isProjectRunProjection(value)).toBe(true);
   });
 
+  it('accepts plan provenance and milestones', () => {
+    const value = {
+      ...projection(),
+      milestones: [{ id: 'milestone-1', title: 'Foundation' }],
+      plan: {
+        id: 'plan-v1',
+        schemaVersion: 1,
+        provenance: {
+          compileReceipt: {
+            provider: 'fixture', model: 'fixture-v1', promptVersion: 'v1',
+            inputHash: 'a'.repeat(64), generatedAt: '2026-09-03T10:00:00Z',
+          },
+        },
+      },
+    };
+    expect(isProjectRunProjection(value)).toBe(true);
+  });
+
   it('accepts repository binding and focus context', () => {
     const value = {
       ...projection(),

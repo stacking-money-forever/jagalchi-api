@@ -12,6 +12,7 @@ import { ProjectFeature, ProjectFeatureEntitlement } from '../project-runs/produ
 import { ExecutionOrchestrationService } from '../execution-orchestration/execution-orchestration.service';
 import type { ProjectRunProjection, ProjectTaskState } from '../project-runs/project-run.entity';
 import { workflowTiming } from './workflow-timing';
+import { assertAiServiceOk, resolveCompiledFirstAction } from '../ai/ai-service-response';
 import { RetryableWorkflowError } from './workflow-runtime';
 
 const HANDLERS = {
@@ -87,12 +88,7 @@ export class AiWorkflowHandlers implements OnModuleInit {
       if (signal.aborted) throw error;
       throw new RetryableWorkflowError('AI_SERVICE_UNAVAILABLE', 'AI service request failed');
     }
-    if (!response.ok) {
-      if (response.status === 408 || response.status === 429 || response.status >= 500) {
-        throw new RetryableWorkflowError('AI_SERVICE_UNAVAILABLE', `AI service returned ${response.status}`);
-      }
-      throw Object.assign(new Error('AI service rejected the request'), { code: 'AI_REQUEST_REJECTED' });
-    }
+    await assertAiServiceOk(response);
     const value: unknown = await response.json();
     const validation = validateJsonSchema(AI_V1_SCHEMAS[responseSchema] as Record<string, unknown>, value);
     if (!validation.valid) throw new AiContractInvalidError(`${validation.path ?? '$.schema'} | ${JSON.stringify(value).slice(0, 900)}`);
@@ -103,16 +99,17 @@ export class AiWorkflowHandlers implements OnModuleInit {
       throw new Error('PROJECT_PLAN operation context is invalid');
     }
     const artifact = this.projectPlanArtifact(result);
-    const tasks = artifact.tasks.map((task, index) => ({
+    const readyTaskId = resolveCompiledFirstAction(artifact as unknown as Record<string, unknown>, new Set(artifact.tasks.map((task) => task.id)), artifact.tasks[0]?.id ?? null);
+    const tasks = artifact.tasks.map((task) => ({
       id: task.id, title: task.title,
-      state: (index === 0 ? 'READY' : 'LOCKED') as ProjectTaskState,
+      state: (task.id === readyTaskId ? 'READY' : 'LOCKED') as ProjectTaskState,
       required: true, milestoneId: task.milestoneId, prerequisiteIds: task.prerequisiteIds,
       purpose: task.purpose, acceptanceCriteria: task.acceptanceCriteria,
       evidenceRequirements: ['PR', ...task.evidenceRules.map((rule) => rule.startsWith('pr:changed-path:') ? `CHANGED_PATH:${rule.slice(16)}` : rule.startsWith('pr:named-check:') ? `NAMED_CHECK:${rule.slice(15)}` : rule.startsWith('test:') ? 'NAMED_CHECK:ci/test' : rule)],
     }));
     const projection: Omit<ProjectRunProjection, 'id' | 'state' | 'version'> = {
       currentTaskId: null,
-      recommendedTaskId: tasks.find((task) => task.state === 'READY')?.id ?? null,
+      recommendedTaskId: readyTaskId,
       plan: { id: artifact.id, schemaVersion: 1 },
       map: {
         nodes: tasks.map(({ id, title, milestoneId, state }) => ({ id, title, milestoneId, state })),
@@ -137,6 +134,7 @@ export class AiWorkflowHandlers implements OnModuleInit {
     if (typeof value.id !== 'string' || !Array.isArray(value.tasks)) throw new Error('PROJECT_PLAN artifact is invalid');
     return value as unknown as {
       id: string;
+      firstAction?: string;
       tasks: Array<{ id: string; title: string; milestoneId: string; prerequisiteIds: string[]; purpose: string; acceptanceCriteria: string[]; evidenceRules: string[] }>;
     };
   }

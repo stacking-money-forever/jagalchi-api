@@ -4167,6 +4167,51 @@
         "properties": {},
         "additionalProperties": false
       },
+      "ProjectRunPlanReceiptDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "promptVersion": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "inputHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "promptVersion",
+          "inputHash",
+          "generatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunPlanProvenanceDto": {
+        "type": "object",
+        "properties": {
+          "compileReceipt": {
+            "$ref": "#/components/schemas/ProjectRunPlanReceiptDto"
+          },
+          "proposalReceipt": {
+            "$ref": "#/components/schemas/ProjectRunPlanReceiptDto"
+          }
+        },
+        "additionalProperties": false
+      },
       "ProjectRunPlanDto": {
         "type": "object",
         "properties": {
@@ -4179,11 +4224,35 @@
           "schemaVersion": {
             "type": "integer",
             "minimum": 1
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProjectRunPlanProvenanceDto"
           }
         },
         "required": [
           "id",
           "schemaVersion"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunMilestoneDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "id",
+          "title"
         ],
         "additionalProperties": false
       },
@@ -4792,6 +4861,13 @@
           },
           "plan": {
             "$ref": "#/components/schemas/ProjectRunPlanDto"
+          },
+          "milestones": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectRunMilestoneDto"
+            }
           },
           "map": {
             "$ref": "#/components/schemas/ProjectRunMapDto"

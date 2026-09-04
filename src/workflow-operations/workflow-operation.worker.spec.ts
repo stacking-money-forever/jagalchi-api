@@ -77,6 +77,20 @@ describe('WorkflowOperationWorker', () => {
     expect(operations.succeed).not.toHaveBeenCalled();
   });
 
+  it('persists semantic AI failure codes from Django 422 responses', async () => {
+    const operation = { id: 'operation-semantic', kind: 'PROJECT_PLAN', state: WorkflowOperationState.Running } as WorkflowOperation;
+    const operations = {
+      reapExpired: vi.fn().mockResolvedValue(0), claim: vi.fn().mockResolvedValue(operation),
+      recordWorkerHeartbeat: vi.fn().mockResolvedValue(undefined), heartbeat: vi.fn().mockResolvedValue(true),
+      finishCancellation: vi.fn().mockResolvedValue(false), succeed: vi.fn(), fail: vi.fn().mockResolvedValue(true), abandon: vi.fn(), retry: vi.fn(),
+    };
+    const handlers = new WorkflowOperationHandlers();
+    const { AiSemanticError } = await import('../ai/ai-service-response');
+    handlers.register('PROJECT_PLAN', vi.fn().mockRejectedValue(new AiSemanticError('AI_PLAN_MALFORMED', 'Plan artifact is invalid')));
+    await new WorkflowOperationWorker(operations as never, handlers, config as never).runOnce('worker-1');
+    expect(operations.fail).toHaveBeenCalledWith('operation-semantic', 'worker-1', 'AI_PLAN_MALFORMED', 'Plan artifact is invalid', 'NONRETRYABLE_DEPENDENCY');
+  });
+
   it('requeues a retryable dependency failure instead of making it terminal', async () => {
     const operation = { id: 'operation-retry', kind: 'PROJECT_PLAN', state: WorkflowOperationState.Running } as WorkflowOperation;
     const operations = {

@@ -4,7 +4,7 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TASK_STATES = new Set<ProjectTaskState>(['LOCKED', 'READY', 'IN_PROGRESS', 'BLOCKED', 'DEFERRED', 'VERIFYING', 'DONE']);
 const ROOT_REQUIRED = ['id', 'state', 'version', 'currentTaskId', 'recommendedTaskId', 'plan', 'map', 'tasks', 'proof'] as const;
-const ROOT_OPTIONAL = ['target', 'citations', 'gaps', 'repositoryBinding', 'pendingOperation'] as const;
+const ROOT_OPTIONAL = ['target', 'citations', 'gaps', 'repositoryBinding', 'pendingOperation', 'milestones'] as const;
 const TASK_REQUIRED = ['id', 'title', 'state', 'required', 'milestoneId', 'prerequisiteIds', 'purpose', 'acceptanceCriteria', 'evidenceRequirements'] as const;
 const TASK_OPTIONAL = ['citationIds', 'gapIds', 'verificationFailure'] as const;
 const FACTS_REQUIRED = ['snapshotId', 'verificationLevel', 'provider', 'repositoryId', 'pullNumber', 'headSha', 'observedAt', 'evaluations'] as const;
@@ -33,6 +33,22 @@ const isTaskShape = (item: Record<string, unknown>): boolean => {
 };
 
 const isCitation = (value: unknown): boolean => record(value) && exact(value, ['id', 'label', 'quote']) && id(value.id) && typeof value.label === 'string' && value.label.length > 0 && value.label.length <= 300 && (value.quote === null || (typeof value.quote === 'string' && value.quote.length <= 2000));
+const isReceipt = (value: unknown): boolean => record(value) && exact(value, ['provider', 'model', 'promptVersion', 'inputHash', 'generatedAt'])
+  && typeof value.provider === 'string' && value.provider.length > 0 && value.provider.length <= 80
+  && typeof value.model === 'string' && value.model.length > 0 && value.model.length <= 160
+  && typeof value.promptVersion === 'string' && value.promptVersion.length > 0 && value.promptVersion.length <= 80
+  && typeof value.inputHash === 'string' && /^[0-9a-f]{64}$/.test(value.inputHash)
+  && iso(value.generatedAt);
+const isPlanProvenance = (value: unknown): boolean => {
+  if (!record(value)) return false;
+  const keys = Object.keys(value);
+  if (!keys.length || keys.length > 2) return false;
+  if (!keys.every((key) => ['compileReceipt', 'proposalReceipt'].includes(key))) return false;
+  if (value.compileReceipt !== undefined && !isReceipt(value.compileReceipt)) return false;
+  if (value.proposalReceipt !== undefined && !isReceipt(value.proposalReceipt)) return false;
+  return !!(value.compileReceipt || value.proposalReceipt);
+};
+const isMilestone = (value: unknown): boolean => record(value) && exact(value, ['id', 'title']) && id(value.id) && typeof value.title === 'string' && value.title.length > 0 && value.title.length <= 300;
 const isGap = (value: unknown): boolean => record(value) && exact(value, ['id', 'description']) && id(value.id) && typeof value.description === 'string' && value.description.length > 0 && value.description.length <= 2000;
 
 const isPendingOperation = (value: unknown): boolean => record(value) && exact(value, ['id', 'kind'])
@@ -59,7 +75,11 @@ export function isProjectRunProjection(value: unknown): value is ProjectRunProje
   if (value.gaps !== undefined && (!Array.isArray(value.gaps) || value.gaps.length > 40 || !value.gaps.every(isGap))) return false;
   if (value.repositoryBinding !== undefined && !isRepositoryBinding(value.repositoryBinding)) return false;
   if (value.pendingOperation !== undefined && !isPendingOperation(value.pendingOperation)) return false;
-  if (!record(value.plan) || !exact(value.plan, ['id', 'schemaVersion']) || !id(value.plan.id) || !Number.isInteger(value.plan.schemaVersion) || Number(value.plan.schemaVersion) < 1) return false;
+  if (!record(value.plan) || !id(value.plan.id) || !Number.isInteger(value.plan.schemaVersion) || Number(value.plan.schemaVersion) < 1) return false;
+  const planKeys = Object.keys(value.plan);
+  if (!planKeys.includes('id') || !planKeys.includes('schemaVersion') || !planKeys.every((key) => ['id', 'schemaVersion', 'provenance'].includes(key))) return false;
+  if (value.plan.provenance !== undefined && !isPlanProvenance(value.plan.provenance)) return false;
+  if (value.milestones !== undefined && (!Array.isArray(value.milestones) || value.milestones.length > 8 || !value.milestones.every(isMilestone))) return false;
   if (!record(value.map) || !exact(value.map, ['nodes', 'edges']) || !Array.isArray(value.map.nodes) || value.map.nodes.length > 40 || !Array.isArray(value.map.edges) || value.map.edges.length > 120) return false;
   if (!Array.isArray(value.tasks) || value.tasks.length > 40) return false;
   const taskIds = new Set<string>();

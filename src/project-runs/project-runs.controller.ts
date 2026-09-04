@@ -9,9 +9,25 @@ import { BindProjectRunPullRequestDto } from './project-runs.dto';
 import { ProjectRunsService, type TaskCommand } from './project-runs.service';
 import { ProjectRunState } from './project-run.entity';
 
+class ProjectRunPlanReceiptDto {
+  @ApiProperty({ type: String, maxLength: 80 }) provider: string;
+  @ApiProperty({ type: String, maxLength: 160 }) model: string;
+  @ApiProperty({ type: String, maxLength: 80 }) promptVersion: string;
+  @ApiProperty({ type: String, pattern: '^[0-9a-f]{64}$' }) inputHash: string;
+  @ApiProperty({ type: String, format: 'date-time' }) generatedAt: string;
+}
+class ProjectRunPlanProvenanceDto {
+  @ApiProperty({ required: false, type: ProjectRunPlanReceiptDto }) compileReceipt?: ProjectRunPlanReceiptDto;
+  @ApiProperty({ required: false, type: ProjectRunPlanReceiptDto }) proposalReceipt?: ProjectRunPlanReceiptDto;
+}
+class ProjectRunMilestoneDto {
+  @ApiProperty({ type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }) id: string;
+  @ApiProperty({ type: String, minLength: 1, maxLength: 300 }) title: string;
+}
 class ProjectRunPlanDto {
   @ApiProperty({ type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }) id: string;
   @ApiProperty({ type: 'integer', minimum: 1 }) schemaVersion: number;
+  @ApiProperty({ required: false, type: ProjectRunPlanProvenanceDto }) provenance?: ProjectRunPlanProvenanceDto;
 }
 class ProjectRunVerificationFailureDto {
   @ApiProperty({ type: String, minLength: 1, maxLength: 128 }) code: string;
@@ -116,6 +132,7 @@ export class ProjectRunProjectionDto {
   @ApiProperty({ type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', nullable: true }) currentTaskId: string | null;
   @ApiProperty({ type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', nullable: true }) recommendedTaskId: string | null;
   @ApiProperty({ type: ProjectRunPlanDto }) plan: ProjectRunPlanDto;
+  @ApiProperty({ required: false, type: [ProjectRunMilestoneDto], maxItems: 8 }) milestones?: ProjectRunMilestoneDto[];
   @ApiProperty({ type: ProjectRunMapDto }) map: ProjectRunMapDto;
   @ApiProperty({ type: [ProjectRunTaskDto], maxItems: 40 }) tasks: ProjectRunTaskDto[];
   @ApiProperty({ required: false, type: [ProjectRunFocusCitationDto], maxItems: 40 }) citations?: ProjectRunFocusCitationDto[];

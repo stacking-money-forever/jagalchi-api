@@ -54,6 +54,7 @@ export function buildFocusContext(
   }
   ingestCitation({ id: 'source-1', label: 'Confirmed requirement evidence', quote: null }, 'source-1');
 
+  // Focus gaps are sourced from confirmed Career Diff `missing` only. Interpret `result.gaps` strings stay on the profile snapshot and are intentionally not merged here.
   const missing = diff && Array.isArray(diff.payload.missing) ? diff.payload.missing : [];
   const gaps: FocusGap[] = (missing.length ? missing : ['typescript']).map((value, index) => {
     if (value && typeof value === 'object' && !Array.isArray(value)) {

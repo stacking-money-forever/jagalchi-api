@@ -8,10 +8,11 @@ import { ProofProfile, ProofProfileState } from '../career/career.entities';
 import { ProjectRun, ProjectRunState, type ProjectRunProjection } from './project-run.entity';
 import { assertProjectRunProjection } from './project-run.projection';
 import {
-  CareerDiffSnapshot, CareerTargetVersion, ProjectFeature, ProjectFeatureEntitlement, ProjectPlanSnapshot,
+  CareerDiffSnapshot, CareerTargetVersion, ProjectFeature, ProjectFeatureEntitlement, ProjectPlanSnapshot, ProjectProposal, ProjectProposalSet,
   ProjectRepositoryBinding, ProjectRunCommand, ProjectTask, ProofPublication, ProofPublicationStatus, ProofSnapshot,
   ProofValidity, RepositoryInvalidationWatermark, VerificationLevel,
 } from './product-spine.entities';
+import { normalizeAiReceipt, normalizePlanMilestones } from '../ai/ai-service-response';
 import { buildFocusContext } from './project-run.focus-context';
 import { VerificationInvalidationService } from './verification-invalidation.service';
 
@@ -345,6 +346,32 @@ export class ProjectRunsService {
     const targetVersion = diff
       ? await this.dataSource.getRepository(CareerTargetVersion).findOne({ where: { id: diff.careerTargetVersionId, ownerId: run.ownerId } })
       : null;
+
+    const planPayload = planSnapshot?.payload;
+    const planArtifact = planPayload && typeof planPayload === 'object' && !Array.isArray(planPayload)
+      ? ((planPayload as Record<string, unknown>).artifact && typeof (planPayload as Record<string, unknown>).artifact === 'object'
+        ? (planPayload as Record<string, unknown>).artifact as Record<string, unknown>
+        : planPayload as Record<string, unknown>)
+      : null;
+    const compileReceipt = normalizeAiReceipt(planPayload && typeof planPayload === 'object' ? (planPayload as Record<string, unknown>).receipt : null);
+    let proposalReceipt = null as ReturnType<typeof normalizeAiReceipt>;
+    if (planSnapshot) {
+      const linkedProposal = await this.dataSource.getRepository(ProjectProposal).findOne({ where: { id: planSnapshot.projectProposalId } });
+      if (linkedProposal) {
+        const linkedSet = await this.dataSource.getRepository(ProjectProposalSet).findOne({ where: { id: linkedProposal.proposalSetId, ownerId: run.ownerId } });
+        proposalReceipt = normalizeAiReceipt(linkedSet?.payload?.receipt);
+      }
+    }
+    const milestones = legacy.milestones ?? (planArtifact ? normalizePlanMilestones(planArtifact) : []);
+    const plan = {
+      ...legacy.plan,
+      ...((compileReceipt || proposalReceipt) ? {
+        provenance: {
+          ...(compileReceipt ? { compileReceipt } : {}),
+          ...(proposalReceipt ? { proposalReceipt } : {}),
+        },
+      } : (legacy.plan.provenance ? { provenance: legacy.plan.provenance } : {})),
+    };
     const focus = buildFocusContext(planSnapshot, diff, targetVersion);
     const taskRows = new Map(tasks.map((task) => [task.taskKey, task]));
     const projectedTasks = legacy.tasks.map((task) => {
@@ -369,6 +396,8 @@ export class ProjectRunsService {
     const supersededPublication = await this.dataSource.getRepository(ProofPublication).findOne({ where: { projectRunId: run.id, validity: ProofValidity.Superseded }, order: { updatedAt: 'DESC' } });
     const base = {
       ...legacy,
+      plan,
+      ...(milestones.length ? { milestones } : {}),
       ...(legacy.citations === undefined && focus.citations.length ? { citations: focus.citations } : {}),
       ...(legacy.gaps === undefined && focus.gaps.length ? { gaps: focus.gaps } : {}),
       ...(repositoryBinding ? { repositoryBinding } : {}),

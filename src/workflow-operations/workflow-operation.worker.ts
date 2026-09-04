@@ -3,6 +3,7 @@ import { WorkflowOperation } from './workflow-operation.entities';
 import { WorkflowOperationService } from './workflow-operation.service';
 import { ConfigService } from '@nestjs/config';
 import { workflowTiming } from './workflow-timing';
+import { AiSemanticError } from '../ai/ai-service-response';
 import { RetryableWorkflowError, WorkflowClock } from './workflow-runtime';
 
 export type WorkflowOperationHandler = (
@@ -101,6 +102,14 @@ export class WorkflowOperationWorker {
         retryable: true,
       };
     }
+    if (error instanceof AiSemanticError) {
+      return {
+        code: error.code,
+        message: error.message,
+        failureClass: 'NONRETRYABLE_DEPENDENCY',
+        retryable: false,
+      };
+    }
     if (error && typeof error === 'object' && 'code' in error && error.code === 'AI_CONTRACT_INVALID') {
       return {
         code: 'AI_CONTRACT_INVALID',
@@ -117,7 +126,7 @@ export class WorkflowOperationWorker {
         retryable: false,
       };
     }
-    if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && /^(JOB_SOURCE_|MANUAL_CAPTURE_|REPOSITORY_|SNAPSHOT_|INSUFFICIENT_|EVIDENCE_)/.test(error.code)) {
+    if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' && /^(JOB_SOURCE_|MANUAL_CAPTURE_|REPOSITORY_|SNAPSHOT_|INSUFFICIENT_|EVIDENCE_|AI_[A-Z0-9_]+)/.test(error.code)) {
       return { code: error.code, message: 'Workflow input or provider result was rejected', failureClass: 'NONRETRYABLE_DEPENDENCY', retryable: false };
     }
     return {

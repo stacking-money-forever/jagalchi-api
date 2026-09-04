@@ -18,6 +18,7 @@ import { ExecutionOrchestrationService } from '../execution-orchestration/execut
 import { WorkflowOperationHandlers } from '../workflow-operations/workflow-operation.worker';
 import { WorkflowOperation, WorkflowOperationResult, WorkflowOperationState } from '../workflow-operations/workflow-operation.entities';
 import { AiContractInvalidError } from '../workflow-operations/ai-workflow.handlers';
+import { assertAiServiceOk, normalizeAiReceipt, normalizePlanMilestones, resolveCompiledFirstAction } from '../ai/ai-service-response';
 import { RetryableWorkflowError } from '../workflow-operations/workflow-runtime';
 
 export const CAREER_V1_FAULT_INJECTOR = Symbol('CAREER_V1_FAULT_INJECTOR');
@@ -145,7 +146,22 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
     if (artifact.projectBlueprintId !== proposal.payload.projectBlueprintId || artifact.projectBlueprintVersion !== proposal.payload.projectBlueprintVersion) throw new AiContractInvalidError('$.result.artifact.projectBlueprintId');
     const tasks = this.validatePlan(artifact, ai, diff, targetVersion, proposal);
     const focus = buildFocusContext(null, diff, targetVersion);
-    const projection: Omit<ProjectRunProjection, 'id' | 'state' | 'version'> = { target: { company: target.company, role: target.role }, currentTaskId: null, recommendedTaskId: tasks[0]?.id ?? null, plan: { id: String(artifact.id), schemaVersion: 1 }, map: { nodes: tasks.map((task) => ({ id: task.id, title: task.title, milestoneId: task.milestoneId, state: task.state })), edges: tasks.flatMap((task, i) => task.prerequisiteIds.map((source, j) => ({ id: `edge-${i}-${j}`, source, target: task.id, kind: 'PREREQUISITE' as const }))) }, citations: focus.citations, gaps: focus.gaps, tasks, proof: null };
+    const taskIds = new Set(tasks.map((task) => task.id));
+    const recommendedTaskId = resolveCompiledFirstAction(artifact, taskIds, tasks.find((task) => task.state === 'READY')?.id ?? null);
+    const milestones = normalizePlanMilestones(artifact);
+    const compileReceipt = normalizeAiReceipt(ai.receipt);
+    const proposalReceipt = normalizeAiReceipt(set.payload.receipt);
+    const projection: Omit<ProjectRunProjection, 'id' | 'state' | 'version'> = {
+      target: { company: target.company, role: target.role },
+      currentTaskId: null,
+      recommendedTaskId,
+      plan: {
+        id: String(artifact.id),
+        schemaVersion: 1,
+        ...(compileReceipt || proposalReceipt ? { provenance: { ...(compileReceipt ? { compileReceipt } : {}), ...(proposalReceipt ? { proposalReceipt } : {}) } } : {}),
+      },
+      ...(milestones.length ? { milestones } : {}),
+      map: { nodes: tasks.map((task) => ({ id: task.id, title: task.title, milestoneId: task.milestoneId, state: task.state })), edges: tasks.flatMap((task, i) => task.prerequisiteIds.map((source, j) => ({ id: `edge-${i}-${j}`, source, target: task.id, kind: 'PREREQUISITE' as const }))) }, citations: focus.citations, gaps: focus.gaps, tasks, proof: null };
     return this.complete(operation, signal, async (manager) => {
       const lockedProposal = await manager.getRepository(ProjectProposal).findOne({ where: { id: proposal.id }, lock: { mode: 'pessimistic_read' } });
       const lockedSet = lockedProposal ? await manager.getRepository(ProjectProposalSet).findOne({ where: { id: lockedProposal.proposalSetId, ownerId: operation.ownerId, careerDiffSnapshotId: diff.id }, lock: { mode: 'pessimistic_read' } }) : null;
@@ -168,7 +184,7 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
         if (!member || !installationId) throw Object.assign(new Error('Repository binding changed'), { code: 'REPOSITORY_BINDING_CHANGED' });
         binding = { mode, installationId, githubRepositoryId: member.githubRepositoryId, repositoryName: member.fullName, repositoryPrivate: member.private, bindingVersion: 1, pullNumber: 17, expectedHeadSha: 'a'.repeat(40) };
       }
-      const created = await this.execution.createProjectRunInTransaction(manager, { ownerId: operation.ownerId, proposalId: lockedProposal.id, catalogVersion: blueprint.catalogVersion, targetId: lockedDiff.careerTargetId, competencySlugs: ['typescript'], projection, operationId: operation.id, roadmap: { title: String(artifact.title), description: 'Project Run read-only Roadmap projection', graph: { schemaVersion: 1, nodes: projection.map.nodes.map((node, index) => ({ id: node.id, type: 'jagalchi-node', position: { x: index * 240, y: 0 }, data: { title: node.title, state: node.state } })), edges: projection.map.edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, data: { kind: edge.kind } })) } }, repository: binding, planSnapshot: { projectProposalId: lockedProposal.id, careerDiffSnapshotId: lockedDiff.id, candidateProfileSnapshotId: lockedProfile.id, blueprintVersionId: blueprint.id, catalogVersion: blueprint.catalogVersion, payload: artifact } });
+      const created = await this.execution.createProjectRunInTransaction(manager, { ownerId: operation.ownerId, proposalId: lockedProposal.id, catalogVersion: blueprint.catalogVersion, targetId: lockedDiff.careerTargetId, competencySlugs: ['typescript'], projection, operationId: operation.id, roadmap: { title: String(artifact.title), description: 'Project Run read-only Roadmap projection', graph: { schemaVersion: 1, nodes: projection.map.nodes.map((node, index) => ({ id: node.id, type: 'jagalchi-node', position: { x: index * 240, y: 0 }, data: { title: node.title, state: node.state } })), edges: projection.map.edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, data: { kind: edge.kind } })) } }, repository: binding, planSnapshot: { projectProposalId: lockedProposal.id, careerDiffSnapshotId: lockedDiff.id, candidateProfileSnapshotId: lockedProfile.id, blueprintVersionId: blueprint.id, catalogVersion: blueprint.catalogVersion, payload: { artifact, receipt: ai.receipt } } });
       return this.resource('PROJECT_RUN', created.projectRun.id, `/api/project-runs/${created.projectRun.id}`, { execution: created });
     });
   }
@@ -190,6 +206,7 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
     // 선택된 proposal이 cite한 gap이 diff에 없으면(설계 불일치 방어) diff 전체 기준으로 후퇴
     const gapIds = requiredGaps.size > 0 ? requiredGaps : missingIds;
     const covered = new Set<string>();
+    const readyTaskId = resolveCompiledFirstAction(artifact, ids, rows[0] ? String(rows[0].id) : null);
     const normalized = rows.map((task, index) => {
       const citations = task.citationIds as string[]; const gaps = task.gapIds as string[];
       if (typeof task.required !== 'boolean') throw new AiContractInvalidError('$.result.artifact.tasks.required');
@@ -198,7 +215,7 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
       const rules = task.evidenceRules as string[];
       const evidence = ['PR', ...rules.map((rule) => rule.startsWith('pr:changed-path:') ? `CHANGED_PATH:${rule.slice(16)}` : rule.startsWith('pr:named-check:') ? `NAMED_CHECK:${rule.slice(15)}` : rule.startsWith('test:') ? 'NAMED_CHECK:ci/test' : 'UNSUPPORTED')];
       if (!evidence.every((rule) => ['PR', 'CHANGED_PATH', 'NAMED_CHECK', 'BASE_BRANCH'].some((allowed) => rule === allowed || rule.startsWith(`${allowed}:`)))) throw Object.assign(new Error('Unsupported evidence rule'), { code: 'EVIDENCE_RULE_UNSUPPORTED' });
-      return { id: String(task.id), title: String(task.title), state: (index === 0 ? 'READY' : 'LOCKED') as 'READY' | 'LOCKED', required: task.required, milestoneId: String(task.milestoneId), prerequisiteIds: task.prerequisiteIds as string[], purpose: String(task.purpose), acceptanceCriteria: task.acceptanceCriteria as string[], evidenceRequirements: evidence, citationIds: citations, gapIds: gaps };
+      return { id: String(task.id), title: String(task.title), state: (String(task.id) === readyTaskId ? 'READY' : 'LOCKED') as 'READY' | 'LOCKED', required: task.required, milestoneId: String(task.milestoneId), prerequisiteIds: task.prerequisiteIds as string[], purpose: String(task.purpose), acceptanceCriteria: task.acceptanceCriteria as string[], evidenceRequirements: evidence, citationIds: citations, gapIds: gaps };
     });
     if (!normalized.some((task) => task.required)) throw new AiContractInvalidError('$.result.artifact.tasks.required');
     return normalized.map((task, index, result) => { if (index === result.length - 1 && [...gapIds].some((id) => !covered.has(id))) throw new AiContractInvalidError('$.result.artifact.tasks.uncoveredGaps'); return task; });
@@ -208,7 +225,7 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
     let response: Response;
     try { response = await fetch(new URL(path, this.config.getOrThrow<string>('AI_SERVICE_URL')), { method: 'POST', headers: { authorization: `Bearer ${this.tokens.issueInternal(operation.ownerId, permission)}`, 'content-type': 'application/json', 'x-request-id': operation.id }, body: JSON.stringify({ schemaVersion: 1, operationId: operation.id, ...input }), signal }); }
     catch { throw new RetryableWorkflowError('AI_SERVICE_UNAVAILABLE', 'AI request failed'); }
-    if (!response.ok) throw new RetryableWorkflowError('AI_SERVICE_UNAVAILABLE', 'AI request failed');
+    await assertAiServiceOk(response);
     const value = await response.json() as Record<string, unknown>;
     const validation = validateJsonSchema(AI_V1_SCHEMAS[schema] as Record<string, unknown>, value);
     if (!validation.valid || value.operationId !== operation.id) throw Object.assign(new AiContractInvalidError(`${validation.path ?? '$.operationId'} | ${JSON.stringify(value).slice(0, 900)}`), {});
