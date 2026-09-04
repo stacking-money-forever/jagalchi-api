@@ -111,6 +111,7 @@
                   "title",
                   "milestoneId",
                   "prerequisiteIds",
+                  "required",
                   "purpose",
                   "acceptanceCriteria",
                   "evidenceRules",
@@ -191,6 +192,9 @@
                       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
                     },
                     "maxItems": 20
+                  },
+                  "required": {
+                    "type": "boolean"
                   }
                 }
               },

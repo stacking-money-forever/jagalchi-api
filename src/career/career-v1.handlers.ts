@@ -190,15 +190,18 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
     // 선택된 proposal이 cite한 gap이 diff에 없으면(설계 불일치 방어) diff 전체 기준으로 후퇴
     const gapIds = requiredGaps.size > 0 ? requiredGaps : missingIds;
     const covered = new Set<string>();
-    return rows.map((task, index) => {
+    const normalized = rows.map((task, index) => {
       const citations = task.citationIds as string[]; const gaps = task.gapIds as string[];
+      if (typeof task.required !== 'boolean') throw new AiContractInvalidError('$.result.artifact.tasks.required');
       if (citations.length === 0 || !citations.every((id) => citationIds.has(id)) || !gaps.every((id) => gapIds.has(id))) throw new AiContractInvalidError('$.result.artifact.tasks.references');
       gaps.forEach((id) => covered.add(id));
       const rules = task.evidenceRules as string[];
       const evidence = ['PR', ...rules.map((rule) => rule.startsWith('pr:changed-path:') ? `CHANGED_PATH:${rule.slice(16)}` : rule.startsWith('pr:named-check:') ? `NAMED_CHECK:${rule.slice(15)}` : rule.startsWith('test:') ? 'NAMED_CHECK:ci/test' : 'UNSUPPORTED')];
       if (!evidence.every((rule) => ['PR', 'CHANGED_PATH', 'NAMED_CHECK', 'BASE_BRANCH'].some((allowed) => rule === allowed || rule.startsWith(`${allowed}:`)))) throw Object.assign(new Error('Unsupported evidence rule'), { code: 'EVIDENCE_RULE_UNSUPPORTED' });
-      return { id: String(task.id), title: String(task.title), state: (index === 0 ? 'READY' : 'LOCKED') as 'READY' | 'LOCKED', required: true, milestoneId: String(task.milestoneId), prerequisiteIds: task.prerequisiteIds as string[], purpose: String(task.purpose), acceptanceCriteria: task.acceptanceCriteria as string[], evidenceRequirements: evidence, citationIds: citations, gapIds: gaps };
-    }).map((task, index, result) => { if (index === result.length - 1 && [...gapIds].some((id) => !covered.has(id))) throw new AiContractInvalidError('$.result.artifact.tasks.uncoveredGaps'); return task; });
+      return { id: String(task.id), title: String(task.title), state: (index === 0 ? 'READY' : 'LOCKED') as 'READY' | 'LOCKED', required: task.required, milestoneId: String(task.milestoneId), prerequisiteIds: task.prerequisiteIds as string[], purpose: String(task.purpose), acceptanceCriteria: task.acceptanceCriteria as string[], evidenceRequirements: evidence, citationIds: citations, gapIds: gaps };
+    });
+    if (!normalized.some((task) => task.required)) throw new AiContractInvalidError('$.result.artifact.tasks.required');
+    return normalized.map((task, index, result) => { if (index === result.length - 1 && [...gapIds].some((id) => !covered.has(id))) throw new AiContractInvalidError('$.result.artifact.tasks.uncoveredGaps'); return task; });
   }
 
   private async ai(operation: WorkflowOperation, signal: AbortSignal, permission: 'EXTRACT' | 'INTERPRET' | 'PROPOSE' | 'COMPILE', path: string, schema: keyof typeof AI_V1_SCHEMAS, input: Record<string, unknown>) {
@@ -232,7 +235,7 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
       const gaps = Array.isArray(payload.citedGapIds) ? payload.citedGapIds : [];
       const citations = Array.isArray(payload.citationIds) ? payload.citationIds : [];
       const rejectionReasons = Array.isArray(payload.rejectionReasons) ? payload.rejectionReasons : [];
-      if (!proposalId || proposalIds.has(proposalId) || blueprintRefs.has(blueprintRef) || !blueprint || rejectionReasons.length > 0 || citations.length === 0 || !gaps.every((id) => typeof id === 'string' && gapIds.has(id)) || !citations.every((id) => typeof id === 'string' && citationIds.has(id))) this.proposalShortfall();
+      if (!proposalId || proposalIds.has(proposalId) || blueprintRefs.has(blueprintRef) || !blueprint || rejectionReasons.length === 0 || !rejectionReasons.every((reason) => typeof reason === 'string' && reason.length > 0) || citations.length === 0 || !gaps.every((id) => typeof id === 'string' && gapIds.has(id)) || !citations.every((id) => typeof id === 'string' && citationIds.has(id))) this.proposalShortfall();
       proposalIds.add(proposalId); blueprintRefs.add(blueprintRef);
       gaps.forEach((id) => coveredGaps.add(String(id)));
       return { payload, blueprint };

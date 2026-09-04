@@ -14,7 +14,7 @@ const citation = { id: 'source-1', title: 'Source', url: 'https://example.com/jo
 const proposal = (index: number) => ({
   id: `proposal-${index}`, title: `Proposal ${index}`, projectBlueprintId: 'b1000000-0000-4000-8000-000000000001', projectBlueprintVersion: 1,
   repositoryMode: 'MANUAL_GREENFIELD', citedGapIds: ['gap-1'], citationIds: ['source-1'], boundedOutcome: 'Outcome', nonGoals: ['No deployment'], durationHours: 10,
-  difficulty: 'MEDIUM', evidenceRules: ['test:unit'], confidence: 1, rejectionReasons: [],
+  difficulty: 'MEDIUM', evidenceRules: ['test:unit'], confidence: 1, rejectionReasons: ['Manual greenfield setup exceeds the bounded duration for cited gaps.'],
 });
 
 const responses: Record<string, Record<string, unknown>> = {
@@ -27,7 +27,7 @@ const responses: Record<string, Record<string, unknown>> = {
       id: 'plan-1', schemaVersion: 1, title: 'Plan', target: 'project_run',
       projectBlueprintId: 'b1000000-0000-4000-8000-000000000001', projectBlueprintVersion: 1, firstAction: 'task-1',
       milestones: [{ id: 'm-1', title: 'Milestone' }],
-      tasks: [{ id: 'task-1', title: 'Ship', milestoneId: 'm-1', prerequisiteIds: [], purpose: 'Ship', acceptanceCriteria: ['Pass'], evidenceRules: ['test:unit'], citationIds: ['source-1'], gapIds: ['gap-1'] }],
+      tasks: [{ id: 'task-1', title: 'Ship', milestoneId: 'm-1', prerequisiteIds: [], required: true, purpose: 'Ship', acceptanceCriteria: ['Pass'], evidenceRules: ['test:unit'], citationIds: ['source-1'], gapIds: ['gap-1'] }],
     } },
   },
 };

@@ -16,6 +16,21 @@ class ProjectRunVerificationFailureDto {
   @ApiProperty({ type: String, minLength: 1, maxLength: 128 }) code: string;
   @ApiProperty({ type: String, maxLength: 1000, nullable: true }) note: string | null;
 }
+class ProjectRunFocusCitationDto {
+  @ApiProperty({ type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }) id: string;
+  @ApiProperty({ type: String, minLength: 1, maxLength: 300 }) label: string;
+  @ApiProperty({ type: String, maxLength: 2000, nullable: true }) quote: string | null;
+}
+class ProjectRunFocusGapDto {
+  @ApiProperty({ type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }) id: string;
+  @ApiProperty({ type: String, minLength: 1, maxLength: 2000 }) description: string;
+}
+class ProjectRunRepositoryBindingDto {
+  @ApiProperty({ type: String, maxLength: 255, nullable: true }) repositoryName: string | null;
+  @ApiProperty({ type: 'integer', minimum: 1, nullable: true }) pullNumber: number | null;
+  @ApiProperty({ type: String, pattern: '^[0-9a-f]{40}$', nullable: true }) headSha: string | null;
+  @ApiProperty({ type: String, maxLength: 500, nullable: true }) pullUrl: string | null;
+}
 class ProjectRunTaskDto {
   @ApiProperty({ type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }) id: string;
   @ApiProperty({ type: String, minLength: 1, maxLength: 300 }) title: string;
@@ -26,6 +41,8 @@ class ProjectRunTaskDto {
   @ApiProperty({ type: String, maxLength: 2000 }) purpose: string;
   @ApiProperty({ type: 'array', maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 1000 } }) acceptanceCriteria: string[];
   @ApiProperty({ type: 'array', maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 1000 } }) evidenceRequirements: string[];
+  @ApiProperty({ required: false, type: 'array', maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' } }) citationIds?: string[];
+  @ApiProperty({ required: false, type: 'array', maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' } }) gapIds?: string[];
   @ApiProperty({ required: false, nullable: true, type: ProjectRunVerificationFailureDto }) verificationFailure?: ProjectRunVerificationFailureDto | null;
 }
 class ProjectRunMapNodeDto {
@@ -63,9 +80,12 @@ class ProjectRunProofFactsDto {
   @ApiProperty({ enum: ['MACHINE_VERIFIED', 'INDEPENDENTLY_REVIEWED'] }) verificationLevel: string;
   @ApiProperty({ enum: ['fixture', 'github'] }) provider: string;
   @ApiProperty({ pattern: '^[1-9]\\d{0,19}$' }) repositoryId: string;
+  @ApiProperty({ required: false, type: String, minLength: 1, maxLength: 255 }) repositoryName?: string;
   @ApiProperty({ type: 'integer', minimum: 1 }) pullNumber: number;
   @ApiProperty({ pattern: '^[0-9a-f]{40}$' }) headSha: string;
   @ApiProperty({ format: 'date-time' }) observedAt: string;
+  @ApiProperty({ required: false, type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', nullable: true }) taskKey?: string | null;
+  @ApiProperty({ required: false, type: String, maxLength: 500, nullable: true }) pullUrl?: string | null;
   @ApiProperty({ type: [ProjectRunProofEvaluationDto], maxItems: 20 }) evaluations: ProjectRunProofEvaluationDto[];
 }
 class ProjectRunProofDto {
@@ -85,6 +105,9 @@ export class ProjectRunProjectionDto {
   @ApiProperty({ type: ProjectRunPlanDto }) plan: ProjectRunPlanDto;
   @ApiProperty({ type: ProjectRunMapDto }) map: ProjectRunMapDto;
   @ApiProperty({ type: [ProjectRunTaskDto], maxItems: 40 }) tasks: ProjectRunTaskDto[];
+  @ApiProperty({ required: false, type: [ProjectRunFocusCitationDto], maxItems: 40 }) citations?: ProjectRunFocusCitationDto[];
+  @ApiProperty({ required: false, type: [ProjectRunFocusGapDto], maxItems: 40 }) gaps?: ProjectRunFocusGapDto[];
+  @ApiProperty({ required: false, type: ProjectRunRepositoryBindingDto }) repositoryBinding?: ProjectRunRepositoryBindingDto;
   @ApiProperty({ type: ProjectRunProofDto, nullable: true }) proof: ProjectRunProofDto | null;
 }
 

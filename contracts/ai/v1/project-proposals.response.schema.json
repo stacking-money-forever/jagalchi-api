@@ -151,7 +151,8 @@
                   "maxLength": 1000,
                   "minLength": 1
                 },
-                "maxItems": 10
+                "maxItems": 10,
+                "minItems": 1
               }
             }
           },

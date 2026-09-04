@@ -4324,6 +4324,26 @@
               "maxLength": 1000
             }
           },
+          "citationIds": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            }
+          },
+          "gapIds": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            }
+          },
           "verificationFailure": {
             "nullable": true,
             "type": "object",
@@ -4344,6 +4364,86 @@
           "purpose",
           "acceptanceCriteria",
           "evidenceRequirements"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunFocusCitationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 2000,
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "quote"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunFocusGapDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "id",
+          "description"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunRepositoryBindingDto": {
+        "type": "object",
+        "properties": {
+          "repositoryName": {
+            "type": "string",
+            "maxLength": 255,
+            "nullable": true
+          },
+          "pullNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true
+          },
+          "headSha": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$",
+            "nullable": true
+          },
+          "pullUrl": {
+            "type": "string",
+            "maxLength": 500,
+            "nullable": true
+          }
+        },
+        "required": [
+          "repositoryName",
+          "pullNumber",
+          "headSha",
+          "pullUrl"
         ],
         "additionalProperties": false
       },
@@ -4455,6 +4555,11 @@
             "type": "string",
             "pattern": "^[1-9]\\d{0,19}$"
           },
+          "repositoryName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
           "pullNumber": {
             "type": "integer",
             "minimum": 1
@@ -4466,6 +4571,18 @@
           "observedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "taskKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "nullable": true
+          },
+          "pullUrl": {
+            "type": "string",
+            "maxLength": 500,
+            "nullable": true
           },
           "evaluations": {
             "maxItems": 20,
@@ -4567,6 +4684,23 @@
             "items": {
               "$ref": "#/components/schemas/ProjectRunTaskDto"
             }
+          },
+          "citations": {
+            "maxItems": 40,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectRunFocusCitationDto"
+            }
+          },
+          "gaps": {
+            "maxItems": 40,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectRunFocusGapDto"
+            }
+          },
+          "repositoryBinding": {
+            "$ref": "#/components/schemas/ProjectRunRepositoryBindingDto"
           },
           "proof": {
             "nullable": true,

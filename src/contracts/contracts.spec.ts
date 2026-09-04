@@ -60,8 +60,10 @@ describe('generated service contracts', () => {
       'projectBlueprintId', 'projectBlueprintVersion', 'milestones', 'tasks', 'firstAction',
     ]));
     expect(artifact.properties.tasks.items.required).toEqual(expect.arrayContaining([
-      'gapIds', 'citationIds', 'evidenceRules',
+      'gapIds', 'citationIds', 'evidenceRules', 'required',
     ]));
+    expect(artifact.properties.tasks.items.properties.required.type).toBe('boolean');
+    expect(proposals.properties.result.properties.proposals.items.properties.rejectionReasons.minItems).toBe(1);
   });
 
   it('uses the compiled Nest generator for production OpenAPI freshness', async () => {

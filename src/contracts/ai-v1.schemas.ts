@@ -17,7 +17,7 @@ const receipt = object({
 }, ['provider', 'model', 'providerRequestId', 'promptVersion', 'inputHash', 'generatedAt', 'durationMs', 'timeoutBudgetSeconds']);
 const stableId = string(128, { minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' });
 const evidenceRule = string(500, { minLength: 1, pattern: '^(pr:changed-path:|pr:named-check:|test:|measurement:|deployment:).+' });
-const proposal = object({
+const proposalShape = (rejectionReasonsMinItems: 0 | 1): Schema => object({
   id: stableId, title: string(300, { minLength: 1 }),
   projectBlueprintId: stableId, projectBlueprintVersion: { type: 'integer', minimum: 1 },
   repositoryMode: { enum: ['EXISTING_OWNED', 'OPEN_SOURCE_CONTRIBUTION', 'MANUAL_GREENFIELD'] },
@@ -26,8 +26,17 @@ const proposal = object({
   durationHours: { type: 'integer', minimum: 1, maximum: 160 },
   difficulty: { enum: ['EASY', 'MEDIUM', 'HARD'] },
   evidenceRules: array(evidenceRule, 20, 1), confidence: { type: 'number', minimum: 0, maximum: 1 },
-  rejectionReasons: array(string(1000, { minLength: 1 }), 10),
+  rejectionReasons: array(string(1000, { minLength: 1 }), 10, rejectionReasonsMinItems),
 });
+const planTask = object({
+  id: stableId, title: string(300, { minLength: 1 }), milestoneId: stableId,
+  prerequisiteIds: array(stableId, 3),
+  purpose: string(2000, { minLength: 1 }),
+  acceptanceCriteria: array(string(1000, { minLength: 1 }), 20, 1),
+  evidenceRules: array(evidenceRule, 20, 1),
+  citationIds: array(stableId, 20, 1), gapIds: array(stableId, 20),
+  required: { type: 'boolean' },
+}, ['id', 'title', 'milestoneId', 'prerequisiteIds', 'required', 'purpose', 'acceptanceCriteria', 'evidenceRules', 'citationIds', 'gapIds']);
 const envelope = (kind: string, result: Schema): Schema => object({ schemaVersion: version, operationId: operation, kind: { const: kind }, result, citations: array(citation, 100), receipt });
 const document = (title: string, schema: Schema): Schema => ({ $schema: 'https://json-schema.org/draft/2020-12/schema', $id: `https://jagalchi.dev/schemas/ai/v1/${title}.schema.json`, title: `Jagalchi AI v1 ${title}`, ...schema });
 
@@ -60,19 +69,13 @@ export const AI_V1_SCHEMAS = {
     gaps: array(object({ id: stableId, description: string(1000, { minLength: 1 }) }), 30),
     constraints: array(string(1000, { minLength: 1 }), 30),
   }, ['schemaVersion', 'operationId', 'objective', 'findings', 'gaps'])),
-  'project-proposals.response.schema.json': document('project-proposals.response', envelope('project_proposals', object({ proposals: array(proposal, 3, 3) }))),
-  'project-plan.request.schema.json': document('project-plan.request', object({ schemaVersion: version, operationId: operation, title: string(300, { minLength: 1 }), selectedProposalId: stableId, proposals: array(proposal, 3, 3), target: { enum: ['project_run', 'proof_mission'] } })),
+  'project-proposals.response.schema.json': document('project-proposals.response', envelope('project_proposals', object({ proposals: array(proposalShape(1), 3, 3) }))),
+  'project-plan.request.schema.json': document('project-plan.request', object({ schemaVersion: version, operationId: operation, title: string(300, { minLength: 1 }), selectedProposalId: stableId, proposals: array(proposalShape(0), 3, 3), target: { enum: ['project_run', 'proof_mission'] } })),
   'project-plan.response.schema.json': document('project-plan.response', envelope('project_plan', object({ artifact: object({
     id: stableId, schemaVersion: version, title: string(300, { minLength: 1 }), target: { enum: ['project_run', 'proof_mission'] },
     projectBlueprintId: stableId, projectBlueprintVersion: { type: 'integer', minimum: 1 },
     milestones: array(object({ id: stableId, title: string(300, { minLength: 1 }) }), 8, 1),
-    tasks: array(object({
-      id: stableId, title: string(300, { minLength: 1 }), milestoneId: stableId,
-      prerequisiteIds: array(stableId, 3), purpose: string(2000, { minLength: 1 }),
-      acceptanceCriteria: array(string(1000, { minLength: 1 }), 20, 1),
-      evidenceRules: array(evidenceRule, 20, 1),
-      citationIds: array(stableId, 20, 1), gapIds: array(stableId, 20),
-    }), 40, 1),
+    tasks: array(planTask, 40, 1),
     firstAction: stableId,
   }) }))),
 } as const;
