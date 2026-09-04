@@ -21,6 +21,7 @@ import { AiContractInvalidError } from '../workflow-operations/ai-workflow.handl
 import { assertAiServiceOk, normalizeAiReceipt, normalizePlanMilestones, resolveCompiledFirstAction } from '../ai/ai-service-response';
 import { RetryableWorkflowError } from '../workflow-operations/workflow-runtime';
 import { buildProposalFindings, collectWaveBCitationIds, collectWaveBCitationRecords, normalizeExtractCitations } from './career-v1.citations';
+import { buildJobPostingExtractRequest } from './career-v1.job-posting-extract';
 
 export const CAREER_V1_FAULT_INJECTOR = Symbol('CAREER_V1_FAULT_INJECTOR');
 export type CareerV1FaultInjector = (point: 'AFTER_DOMAIN' | 'AFTER_RESULT') => void | Promise<void>;
@@ -66,7 +67,7 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
       throw error;
     }
     const cached = await this.targetVersions.findOne({ where: { ownerId: operation.ownerId, sourceHash: capture.sourceHash } });
-    const ai = cached ? null : await this.ai(operation, signal, 'EXTRACT', AI_V1_ENDPOINTS.jobPostingExtract, 'job-posting-extract.response.schema.json', { text: capture.normalizedText, sourceUrl: capture.provenance.finalUrl ?? capture.provenance.requestedUrl, sourceTitle: capture.sourceTitle });
+    const ai = cached ? null : await this.ai(operation, signal, 'EXTRACT', AI_V1_ENDPOINTS.jobPostingExtract, 'job-posting-extract.response.schema.json', buildJobPostingExtractRequest(capture));
     return this.complete(operation, signal, async (manager) => {
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`career-target:${operation.ownerId}:${capture.sourceHash}`]);
       const versions = manager.getRepository(CareerTargetVersion);
@@ -331,3 +332,4 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
 
   private resource(type: string, id: string, href: string, extra: Record<string, unknown> = {}) { return { ...extra, resource: { resourceType: type, resourceId: id, resourceHref: href } }; }
 }
+
