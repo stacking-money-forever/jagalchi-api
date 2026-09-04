@@ -2,12 +2,13 @@ import { BadRequestException, Body, Controller, Delete, Get, Headers, NotFoundEx
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, MoreThan, Repository } from 'typeorm';
-import { ApiBearerAuth, ApiBody, ApiParam, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiOkResponse, ApiParam, ApiTags } from '@nestjs/swagger';
 import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateProjectPlanOperationDto, CreateWorkflowOperationDto } from './workflow-operation.dto';
 import { WorkflowOperationService } from './workflow-operation.service';
+import { WorkflowOperationCancelResponseDto, WorkflowOperationResponseDto } from './workflow-operation.response.dto';
 import { ProjectRunEntitlement } from '../project-runs/project-run-entitlement.entity';
 import { ProjectFeature, ProjectFeatureEntitlement } from '../project-runs/product-spine.entities';
 
@@ -44,7 +45,7 @@ export class WorkflowOperationController {
     return this.operations.createOrReplay({ ownerId: user.id, route: '/api/v1/operations/project-plan', idempotencyKey: dto.idempotencyKey, kind: 'PROJECT_PLAN', input: { ...dto.input, targetId: dto.targetId, competencySlugs: dto.competencySlugs } });
   }
 
-  @Get(':id') @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @Get(':id') @ApiParam({ name: 'id', type: String, format: 'uuid' }) @ApiOkResponse({ type: WorkflowOperationResponseDto })
   get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) { return this.operations.get(user.id, id); }
 
   @Delete(':id') @ApiParam({ name: 'id', type: String, format: 'uuid' })
@@ -73,8 +74,8 @@ export class WorkflowOperationController {
 @Controller('workflow-operations')
 export class WorkflowOperationPublicController {
   constructor(private readonly operations: WorkflowOperationService) {}
-  @Get(':id') get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) { return this.operations.get(user.id, id); }
-  @Post(':id/cancel') cancel(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) {
+  @Get(':id') @ApiOkResponse({ type: WorkflowOperationResponseDto }) get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) { return this.operations.get(user.id, id); }
+  @Post(':id/cancel') @ApiCreatedResponse({ type: WorkflowOperationCancelResponseDto }) cancel(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) {
     if (!/^[1-9]\d*$/.test(version ?? '') || !Number.isSafeInteger(Number(version))) throw new BadRequestException('If-Match must be an unquoted positive integer');
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key ?? '')) throw new BadRequestException('Idempotency-Key must be a UUID');
     return this.operations.requestCancelVersioned(id, user.id, Number(version), key);

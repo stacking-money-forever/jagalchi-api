@@ -5,6 +5,7 @@ import { DataSource, IsNull, MoreThan, Repository } from 'typeorm';
 import { createHash } from 'node:crypto';
 import { FIXTURE_JOB_URL, LIVE_JOB_SOURCE_HOSTS, validateJobSourceUrl, validateManualCapture } from '../job-sources';
 import { CareerTargetVersion, CandidateProfileSnapshot, CareerDiffSnapshot, ProjectFeature, ProjectFeatureEntitlement, ProjectProposal, ProjectProposalSet, ProjectRunCommand, SnapshotState } from '../project-runs/product-spine.entities';
+import { GithubInstallation, GithubInstallationRepository, GithubInstallationStatus } from '../github/github.entities';
 import { WorkflowOperationService } from '../workflow-operations/workflow-operation.service';
 
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object' ? `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value) ?? 'null';
@@ -21,6 +22,8 @@ export class CareerV1Service {
     @InjectRepository(ProjectProposalSet) private readonly proposalSets: Repository<ProjectProposalSet>,
     @InjectRepository(ProjectProposal) private readonly proposals: Repository<ProjectProposal>,
     @InjectRepository(ProjectRunCommand) private readonly commands: Repository<ProjectRunCommand>,
+    @InjectRepository(GithubInstallation) private readonly installations: Repository<GithubInstallation>,
+    @InjectRepository(GithubInstallationRepository) private readonly installationRepositories: Repository<GithubInstallationRepository>,
     private readonly dataSource?: DataSource,
   ) {}
 
@@ -71,6 +74,21 @@ export class CareerV1Service {
     if (mode !== 'MANUAL_GREENFIELD' && typeof (repository as Record<string, unknown>).githubRepositoryId !== 'string') throw new BadRequestException('githubRepositoryId is required');
     if (mode === 'MANUAL_GREENFIELD' && Object.keys(repository as Record<string, unknown>).some((field) => field !== 'mode')) throw new BadRequestException('Manual greenfield repository must not contain GitHub fields');
     return this.createOperation(ownerId, '/api/project-run-operations', key, 'PROJECT_RUN_CREATE', body);
+  }
+
+  async listEligibleGithubRepositories(ownerId: string) {
+    await this.requireEntitled(ownerId);
+    const installations = await this.installations.find({ where: { ownerUserId: ownerId, status: GithubInstallationStatus.Active } });
+    if (!installations.length) return [];
+    const repositories = (await Promise.all(
+      installations.map((installation) => this.installationRepositories.find({ where: { installationId: installation.id, active: true }, order: { fullName: 'ASC' } })),
+    )).flat();
+    return repositories.map((repository) => ({
+      repositoryId: repository.githubRepositoryId,
+      name: repository.fullName.split('/').at(-1) ?? repository.fullName,
+      fullName: repository.fullName,
+      private: repository.private,
+    }));
   }
 
   async getTargetVersion(ownerId: string, id: string) { return this.ownerResource(this.targetVersions, ownerId, id); }

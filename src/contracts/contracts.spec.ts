@@ -96,6 +96,15 @@ describe('generated service contracts', () => {
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });
 
+  it('documents the Wave B browser entry path and workflow poll contract', async () => {
+    const document = JSON.parse(await readFile(resolve(process.cwd(), 'contracts/openapi.json'), 'utf8'));
+    const accepted = document.paths['/api/career/target-imports'].post.responses['202'];
+    expect(accepted.headers?.['Retry-After']).toBeDefined();
+    expect(document.components.schemas.WorkflowOperationResultDto.properties.resourceHref).toBeDefined();
+    expect(document.paths['/api/career/eligible-github-repositories'].get).toBeDefined();
+    expect(document.paths['/api/workflow-operations/{id}/cancel'].post.parameters.map((item: { name: string }) => item.name)).toEqual(expect.arrayContaining(['if-match', 'idempotency-key']));
+  });
+
   it('rejects the same representative bound violations in runtime and generated OpenAPI', async () => {
     const document = JSON.parse(await readFile(resolve(process.cwd(), 'contracts/openapi.json'), 'utf8')) as JsonSchema;
     const schema = ((document.components as JsonSchema).schemas as Record<string, JsonSchema>).ProjectRunProjectionDto!;

@@ -81,7 +81,7 @@ export class WorkflowOperationService {
     });
     if (existing) {
       if (existing.kind !== args.kind || existing.inputHash !== inputHash) {
-        throw new ConflictException('Idempotency key was already used with a different request');
+        throw new ConflictException({ code: 'IDEMPOTENCY_KEY_REUSED', message: 'Idempotency key was already used with a different request' });
       }
       return { operation: existing, replayed: true };
     }
@@ -189,7 +189,7 @@ export class WorkflowOperationService {
       const operations = manager.getRepository(WorkflowOperation);
       const operation = await operations.findOne({ where: { id, ownerId }, lock: { mode: 'pessimistic_write' } });
       if (!operation) throw new ConflictException({ code: 'OPERATION_NOT_FOUND', message: 'Operation is not available' });
-      if (operation.version !== expectedVersion) throw new ConflictException({ code: 'STALE_VERSION', message: 'Operation version is stale' });
+      if (operation.version !== expectedVersion) throw new ConflictException({ code: 'STALE_VERSION', message: 'Operation version is stale', details: { currentVersion: operation.version } });
       if (TERMINAL.has(operation.state)) throw new ConflictException({ code: 'OPERATION_TERMINAL', message: 'Operation is terminal' });
       if (operation.state === WorkflowOperationState.CancelRequested) throw new ConflictException({ code: 'OPERATION_CANCEL_ALREADY_REQUESTED', message: 'Cancellation is already requested' });
       operation.state = operation.state === WorkflowOperationState.Pending ? WorkflowOperationState.Cancelled : WorkflowOperationState.CancelRequested;

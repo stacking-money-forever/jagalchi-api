@@ -10,4 +10,12 @@ describe('CareerV1Controller', () => {
     expect(service.targetImport).toHaveBeenCalledWith('owner-1', '00000000-0000-4000-8000-000000000099', expect.any(Object));
     expect(() => controller.targetImport({ id: 'owner-1', roles: [] }, 'bad', {})).toThrow(BadRequestException);
   });
+
+  it('exposes owner-scoped eligible GitHub repositories for fixture repository selection', async () => {
+    const service = { listEligibleGithubRepositories: vi.fn().mockResolvedValue([{ repositoryId: '9000001', name: 'verification-repository', fullName: 'fixture/verification-repository', private: true }]) };
+    const controller = new CareerV1Controller(service as never);
+    await expect(controller.listEligibleGithubRepositories({ id: 'owner-1', roles: [] })).resolves.toEqual([
+      { repositoryId: '9000001', name: 'verification-repository', fullName: 'fixture/verification-repository', private: true },
+    ]);
+  });
 });

@@ -3317,7 +3317,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowOperationResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3372,7 +3379,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowOperationResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3416,7 +3430,14 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowOperationCancelResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3454,7 +3475,23 @@
         },
         "responses": {
           "202": {
-            "description": ""
+            "description": "Workflow operation accepted for asynchronous processing",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before polling GET /api/workflow-operations/{id} again",
+                "schema": {
+                  "type": "integer",
+                  "example": 2
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowOperationResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3492,7 +3529,52 @@
         },
         "responses": {
           "202": {
-            "description": ""
+            "description": "Workflow operation accepted for asynchronous processing",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before polling GET /api/workflow-operations/{id} again",
+                "schema": {
+                  "type": "integer",
+                  "example": 2
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowOperationResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "career v1"
+        ]
+      }
+    },
+    "/api/career/eligible-github-repositories": {
+      "get": {
+        "operationId": "CareerV1Controller_listEligibleGithubRepositories",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EligibleGithubRepositoryDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3594,7 +3676,7 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "Confirmed profile snapshot"
           }
         },
         "security": [
@@ -3640,7 +3722,7 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "Draft career diff snapshot"
           }
         },
         "security": [
@@ -3714,7 +3796,7 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "Confirmed career diff snapshot"
           }
         },
         "security": [
@@ -3760,7 +3842,23 @@
         },
         "responses": {
           "202": {
-            "description": ""
+            "description": "Workflow operation accepted for asynchronous processing",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before polling GET /api/workflow-operations/{id} again",
+                "schema": {
+                  "type": "integer",
+                  "example": 2
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowOperationResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3826,7 +3924,23 @@
         },
         "responses": {
           "202": {
-            "description": ""
+            "description": "Workflow operation accepted for asynchronous processing",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before polling GET /api/workflow-operations/{id} again",
+                "schema": {
+                  "type": "integer",
+                  "example": 2
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowOperationResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5147,6 +5261,157 @@
         ],
         "additionalProperties": false
       },
+      "WorkflowOperationResultDto": {
+        "type": "object",
+        "properties": {
+          "resourceType": {
+            "type": "string"
+          },
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resourceHref": {
+            "type": "string",
+            "example": "/api/career/target-versions/00000000-0000-4000-8000-000000000001"
+          }
+        },
+        "required": [
+          "resourceType",
+          "resourceId",
+          "resourceHref"
+        ],
+        "additionalProperties": false
+      },
+      "WorkflowOperationErrorDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "AI_PLAN_MALFORMED"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "retryable"
+        ],
+        "additionalProperties": false
+      },
+      "WorkflowOperationResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "SUCCEEDED",
+              "FAILED",
+              "CANCELLED",
+              "CANCEL_REQUESTED"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "maxAttempts": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "nextAttemptAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "result": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowOperationResultDto"
+              }
+            ]
+          },
+          "error": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowOperationErrorDto"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "body": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "version",
+          "attempt",
+          "maxAttempts",
+          "nextAttemptAt",
+          "result",
+          "error",
+          "createdAt",
+          "updatedAt",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "WorkflowOperationCancelResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "CANCELLED",
+              "CANCEL_REQUESTED"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "version"
+        ],
+        "additionalProperties": false
+      },
       "TargetInputDto": {
         "type": "object",
         "properties": {
@@ -5257,6 +5522,33 @@
         },
         "required": [
           "repositoryIds"
+        ],
+        "additionalProperties": false
+      },
+      "EligibleGithubRepositoryDto": {
+        "type": "object",
+        "properties": {
+          "repositoryId": {
+            "type": "string",
+            "pattern": "^[1-9]\\d{0,19}$"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "fullName": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "private": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "repositoryId",
+          "name",
+          "fullName",
+          "private"
         ],
         "additionalProperties": false
       },

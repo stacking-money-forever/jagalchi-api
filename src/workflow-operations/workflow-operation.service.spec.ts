@@ -16,6 +16,18 @@ describe('WorkflowOperationService', () => {
     expect(first).toEqual({ id: 'operation-1', state: WorkflowOperationState.Cancelled, version: 2 }); expect(replay).toEqual(first); expect(operations.save).toHaveBeenCalledOnce();
   });
 
+  it('rejects reused workflow idempotency keys with a semantic conflict code', async () => {
+    const existing = {
+      id: 'operation-1', ownerId: 'owner-1', route: '/runs', idempotencyKey: 'key-1',
+      kind: 'PROJECT_RUN', inputHash: 'deadbeef',
+    };
+    const operations = { findOne: vi.fn().mockResolvedValue(existing) };
+    const service = new WorkflowOperationService({} as never, operations as never, {} as never);
+    await expect(service.createOrReplay({
+      ownerId: 'owner-1', route: '/runs', idempotencyKey: 'key-1', kind: 'PROJECT_RUN', input: { value: true },
+    })).rejects.toMatchObject({ response: { code: 'IDEMPOTENCY_KEY_REUSED' } });
+  });
+
   it('replays the original operation for the same owner, route, key, kind, and input', async () => {
     const existing = {
       id: 'operation-1', ownerId: 'owner-1', route: '/runs', idempotencyKey: 'key-1',
@@ -182,4 +194,15 @@ describe('WorkflowOperationService', () => {
     await expect(service.succeed('operation-1', 'dead-worker', { stale: true })).resolves.toBe(false);
     expect(resultRepository.save).not.toHaveBeenCalled();
   });
+
+  it('returns currentVersion when cancel If-Match is stale', async () => {
+    const operation = { id: 'operation-1', ownerId: 'owner-1', kind: 'JOB_TARGET_IMPORT', state: WorkflowOperationState.Running, version: 3, completedAt: null };
+    const operations = { findOne: vi.fn().mockResolvedValue(operation), save: vi.fn() };
+    const commands = { findOne: vi.fn().mockResolvedValue(null), create: vi.fn(), save: vi.fn() };
+    const manager = { getRepository: (entity: { name: string }) => entity === WorkflowOperation ? operations : entity === ProjectRunCommand ? commands : null };
+    const service = new WorkflowOperationService({ transaction: (callback) => callback(manager) } as never, {} as never, {} as never);
+    await expect(service.requestCancelVersioned('operation-1', 'owner-1', 1, '00000000-0000-4000-8000-000000000099'))
+      .rejects.toMatchObject({ response: { code: 'STALE_VERSION', details: { currentVersion: 3 } } });
+  });
 });
+

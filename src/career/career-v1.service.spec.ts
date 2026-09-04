@@ -3,13 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { CareerV1Service } from './career-v1.service';
 import { CandidateProfileSnapshot, CareerDiffSnapshot, ProjectRunCommand, SnapshotState } from '../project-runs/product-spine.entities';
 
-function setup(provider = 'fixture') {
+function setup(provider = 'fixture', options: { installations?: unknown[]; repositories?: unknown[] } = {}) {
   const config = { get: vi.fn((key: string) => ({ PROJECT_RUNS_ENABLED: 'true', JOB_SOURCE_PROVIDER: provider }[key])) };
   const operations = { createOrReplay: vi.fn().mockResolvedValue({ operation: { id: 'operation-1' }, replayed: false }), get: vi.fn().mockResolvedValue({ id: 'operation-1', state: 'PENDING' }) };
   const entitlements = { exists: vi.fn().mockResolvedValue(true) };
   const targetVersions = { findOne: vi.fn() };
   const empty = { findOne: vi.fn(), find: vi.fn(), create: vi.fn((value) => value), save: vi.fn(async (value) => value) };
-  const service = new CareerV1Service(config as never, operations as never, entitlements as never, targetVersions as never, empty as never, empty as never, empty as never, empty as never, empty as never);
+  const installations = { find: vi.fn().mockResolvedValue(options.installations ?? [{ id: 'install-1' }]) };
+  const installationRepositories = { find: vi.fn().mockResolvedValue(options.repositories ?? [{ githubRepositoryId: '9000001', fullName: 'fixture/verification-repository', private: true }]) };
+  const service = new CareerV1Service(config as never, operations as never, entitlements as never, targetVersions as never, empty as never, empty as never, empty as never, empty as never, empty as never, installations as never, installationRepositories as never);
   return { service, operations, targetVersions };
 }
 
@@ -47,7 +49,7 @@ describe('CareerV1Service intake boundary', () => {
     let queue = Promise.resolve<unknown>(undefined);
     const dataSource = { transaction: vi.fn((callback) => { const result = queue.then(() => callback(manager)); queue = result.then(() => undefined, () => undefined); return result; }) };
     const empty = { findOne: vi.fn(), find: vi.fn(), create: vi.fn((value) => value), save: vi.fn(async (value) => value) };
-    const service = new CareerV1Service({} as never, {} as never, {} as never, {} as never, profiles as never, empty as never, empty as never, empty as never, commands as never, dataSource as never);
+    const service = new CareerV1Service({} as never, {} as never, {} as never, {} as never, profiles as never, empty as never, empty as never, empty as never, commands as never, { find: vi.fn() } as never, { find: vi.fn() } as never, dataSource as never);
     const input = { acceptedRepositoryIds: ['9000001'] };
     const [first, second] = await Promise.all([service.confirmProfile('owner-1', 'snapshot-1', '00000000-0000-4000-8000-000000000099', input), service.confirmProfile('owner-1', 'snapshot-1', '00000000-0000-4000-8000-000000000099', input)]);
     expect(second).toEqual(first); expect(profiles.save).toHaveBeenCalledOnce(); expect(commands.save).toHaveBeenCalledOnce();
@@ -61,9 +63,16 @@ describe('CareerV1Service intake boundary', () => {
     const manager = { getRepository: (entity: { name: string }) => entity === CareerDiffSnapshot ? diffs : entity === ProjectRunCommand ? commands : null };
     let queue = Promise.resolve<unknown>(undefined); const dataSource = { transaction: vi.fn((callback) => { const result = queue.then(() => callback(manager)); queue = result.then(() => undefined, () => undefined); return result; }) };
     const empty = { findOne: vi.fn(), find: vi.fn(), create: vi.fn((value) => value), save: vi.fn(async (value) => value) };
-    const service = new CareerV1Service({} as never, {} as never, {} as never, {} as never, empty as never, diffs as never, empty as never, empty as never, commands as never, dataSource as never);
+    const service = new CareerV1Service({} as never, {} as never, {} as never, {} as never, empty as never, diffs as never, empty as never, empty as never, commands as never, { find: vi.fn() } as never, { find: vi.fn() } as never, dataSource as never);
     const input = { acceptedCompetencyIds: ['typescript'] }; const key = '00000000-0000-4000-8000-000000000099';
     const [first, second] = await Promise.all([service.confirmDiff('owner-1', 'diff-1', key, input), service.confirmDiff('owner-1', 'diff-1', key, input)]);
     expect(second).toEqual(first); expect(diffs.save).toHaveBeenCalledOnce(); expect(commands.save).toHaveBeenCalledOnce();
+  });
+
+  it('lists owner-scoped eligible fixture repositories for Project Runs entry', async () => {
+    const subject = setup();
+    await expect(subject.service.listEligibleGithubRepositories('owner-1')).resolves.toEqual([
+      { repositoryId: '9000001', name: 'verification-repository', fullName: 'fixture/verification-repository', private: true },
+    ]);
   });
 });

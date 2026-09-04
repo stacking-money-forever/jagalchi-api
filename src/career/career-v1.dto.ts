@@ -39,6 +39,13 @@ export class TargetImportDto {
   @ValidateNested() @Type(() => TargetInputDto) @Validate(TargetInputVariantConstraint) input: TargetInputDto;
 }
 
+export class EligibleGithubRepositoryDto {
+  @ApiProperty({ type: String, pattern: '^[1-9]\\d{0,19}$' }) repositoryId: string;
+  @ApiProperty({ type: String, maxLength: 255 }) name: string;
+  @ApiProperty({ type: String, maxLength: 255 }) fullName: string;
+  @ApiProperty({ type: Boolean }) private: boolean;
+}
+
 export class ProfileSnapshotOperationDto {
   @ApiProperty({ type: [String], maxItems: 50, description: 'Empty selects all eligible installed repositories within the server cap.' })
   @IsArray() @ArrayMaxSize(50) @Matches(/^[1-9]\d{0,19}$/, { each: true }) repositoryIds: string[];
