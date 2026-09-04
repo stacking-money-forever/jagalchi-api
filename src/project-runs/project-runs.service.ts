@@ -7,7 +7,12 @@ import { WorkflowOperation, WorkflowOperationState } from '../workflow-operation
 import { ProofProfile, ProofProfileState } from '../career/career.entities';
 import { ProjectRun, ProjectRunState, type ProjectRunProjection } from './project-run.entity';
 import { assertProjectRunProjection } from './project-run.projection';
-import { ProjectFeature, ProjectFeatureEntitlement, ProjectRunCommand, ProjectTask, ProofPublication, ProofPublicationStatus, ProofSnapshot, ProofValidity, RepositoryInvalidationWatermark, VerificationLevel } from './product-spine.entities';
+import {
+  CareerDiffSnapshot, CareerTargetVersion, ProjectFeature, ProjectFeatureEntitlement, ProjectPlanSnapshot,
+  ProjectRepositoryBinding, ProjectRunCommand, ProjectTask, ProofPublication, ProofPublicationStatus, ProofSnapshot,
+  ProofValidity, RepositoryInvalidationWatermark, VerificationLevel,
+} from './product-spine.entities';
+import { buildFocusContext } from './project-run.focus-context';
 import { VerificationInvalidationService } from './verification-invalidation.service';
 
 export type TaskCommand = 'start' | 'defer' | 'block' | 'resume' | 'verify';
@@ -247,22 +252,60 @@ export class ProjectRunsService {
     const prior = run.projection.proof; const projection: ProjectRunProjection = { ...run.projection, version: run.version, proof: { summary: prior?.summary ?? 'Machine verification for the current Project Run', validUntil: prior?.validUntil ?? null, publication: { state, publicId }, verification: prior?.verification ?? { state: 'PASS', verifiedAt: null }, ...(prior?.facts ? { facts: prior.facts } : {}) } }; assertProjectRunProjection(projection); return projection;
   }
   private validated(run: ProjectRun): ProjectRunProjection { assertProjectRunProjection(run.projection); if (run.projection.id !== run.id || run.projection.state !== run.state || run.projection.version !== run.version) throw new Error('ProjectRun projection metadata is inconsistent with its aggregate'); return run.projection; }
+  private pullUrl(repositoryName: string | null | undefined, pullNumber: number | null | undefined): string | null {
+    if (!repositoryName || !pullNumber) return null;
+    return `https://github.com/${repositoryName}/pull/${pullNumber}`;
+  }
+
+  private repositoryBindingView(binding: ProjectRepositoryBinding | null | undefined): ProjectRunProjection['repositoryBinding'] | undefined {
+    if (!binding || binding.pullNumber === null) return undefined;
+    return {
+      repositoryName: binding.repositoryName,
+      pullNumber: binding.pullNumber,
+      headSha: binding.expectedHeadSha,
+      pullUrl: this.pullUrl(binding.repositoryName, binding.pullNumber),
+    };
+  }
+
   private async ownerProjection(run: ProjectRun): Promise<ProjectRunProjection> {
     const legacy = this.validated(run);
     if (!this.dataSource) return legacy;
-    const [tasks, snapshot, publication, profile] = await Promise.all([
+    const [tasks, snapshot, publication, profile, binding, planSnapshot] = await Promise.all([
       this.dataSource.getRepository(ProjectTask).find({ where: { projectRunId: run.id } }),
       this.dataSource.getRepository(ProofSnapshot).findOne({ where: { projectRunId: run.id }, order: { createdAt: 'DESC' } }),
       this.dataSource.getRepository(ProofPublication).findOne({ where: { projectRunId: run.id, validity: Not(ProofValidity.Superseded) }, order: { updatedAt: 'DESC' } }),
       this.dataSource.getRepository(ProofProfile).findOne({ where: { ownerUserId: run.ownerId } }),
+      this.dataSource.getRepository(ProjectRepositoryBinding).findOne({ where: { projectRunId: run.id } }),
+      run.planSnapshotId ? this.dataSource.getRepository(ProjectPlanSnapshot).findOne({ where: { id: run.planSnapshotId, ownerId: run.ownerId } }) : Promise.resolve(null),
     ]);
+    const diff = planSnapshot
+      ? await this.dataSource.getRepository(CareerDiffSnapshot).findOne({ where: { id: planSnapshot.careerDiffSnapshotId, ownerId: run.ownerId } })
+      : null;
+    const targetVersion = diff
+      ? await this.dataSource.getRepository(CareerTargetVersion).findOne({ where: { id: diff.careerTargetVersionId, ownerId: run.ownerId } })
+      : null;
+    const focus = buildFocusContext(planSnapshot, diff, targetVersion);
     const taskRows = new Map(tasks.map((task) => [task.taskKey, task]));
     const projectedTasks = legacy.tasks.map((task) => {
       const row = taskRows.get(task.id);
-      return { ...task, verificationFailure: row?.blockReasonCode ? { code: row.blockReasonCode, note: row.blockNote } : null };
+      const refs = focus.taskRefs[task.id];
+      return {
+        ...task,
+        ...(task.citationIds === undefined && refs?.citationIds.length ? { citationIds: refs.citationIds } : {}),
+        ...(task.gapIds === undefined && refs?.gapIds.length ? { gapIds: refs.gapIds } : {}),
+        verificationFailure: row?.blockReasonCode ? { code: row.blockReasonCode, note: row.blockNote } : null,
+      };
     });
+    const repositoryBinding = legacy.repositoryBinding ?? this.repositoryBindingView(binding);
+    const base = {
+      ...legacy,
+      ...(legacy.citations === undefined && focus.citations.length ? { citations: focus.citations } : {}),
+      ...(legacy.gaps === undefined && focus.gaps.length ? { gaps: focus.gaps } : {}),
+      ...(repositoryBinding ? { repositoryBinding } : {}),
+      tasks: projectedTasks,
+    };
     if (!snapshot) {
-      const projection = { ...legacy, tasks: projectedTasks };
+      const projection = { ...base, proof: legacy.proof };
       assertProjectRunProjection(projection); return projection;
     }
     const payload = snapshot.payload;
@@ -271,8 +314,22 @@ export class ProjectRunsService {
     const watermark = provider && repositoryId ? await this.dataSource.getRepository(RepositoryInvalidationWatermark).findOne({ where: { provider, repositoryId } }) : null;
     const stale = publication?.validity === ProofValidity.Invalidated || (watermark?.generation ?? 0) !== snapshot.invalidationGeneration;
     const evaluations = Array.isArray(payload.evaluations) ? payload.evaluations.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item)).map((item) => ({ ruleId: String(item.ruleId), type: item.type as 'MERGED_PR' | 'BASE_BRANCH' | 'CHANGED_PATH' | 'NAMED_CHECK', passed: item.passed === true, code: String(item.code) })) : [];
-    const facts = provider && repositoryId && Number.isInteger(payload.pullNumber) && typeof payload.headSha === 'string' && typeof payload.observedAt === 'string'
-      ? { snapshotId: snapshot.id, verificationLevel: snapshot.verificationLevel, provider, repositoryId, pullNumber: Number(payload.pullNumber), headSha: payload.headSha, observedAt: payload.observedAt, evaluations }
+    const repositoryName = binding?.repositoryName ?? (typeof payload.repositoryName === 'string' ? payload.repositoryName : undefined);
+    const pullNumber = Number.isInteger(payload.pullNumber) ? Number(payload.pullNumber) : binding?.pullNumber ?? null;
+    const facts = provider && repositoryId && pullNumber && typeof payload.headSha === 'string' && typeof payload.observedAt === 'string'
+      ? {
+        snapshotId: snapshot.id,
+        verificationLevel: snapshot.verificationLevel,
+        provider,
+        repositoryId,
+        ...(repositoryName ? { repositoryName } : {}),
+        pullNumber,
+        headSha: payload.headSha,
+        observedAt: payload.observedAt,
+        ...(typeof payload.taskKey === 'string' ? { taskKey: payload.taskKey } : {}),
+        pullUrl: this.pullUrl(repositoryName ?? binding?.repositoryName, pullNumber),
+        evaluations,
+      }
       : undefined;
     const proof: ProjectRunProjection['proof'] = {
       summary: legacy.proof?.summary ?? 'Machine verification for the current Project Run', validUntil: legacy.proof?.validUntil ?? null,
@@ -280,7 +337,7 @@ export class ProjectRunsService {
       verification: { state: stale ? 'STALE' : payload.status === 'FAIL' ? 'FAIL' : 'PASS', verifiedAt: snapshot.verifiedAt.toISOString() },
       ...(facts ? { facts } : {}),
     };
-    const projection = { ...legacy, tasks: projectedTasks, proof };
+    const projection = { ...base, proof };
     assertProjectRunProjection(projection); return projection;
   }
 }

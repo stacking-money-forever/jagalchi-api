@@ -1,9 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Header, Headers, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiBearerAuth, ApiOkResponse, ApiParam, ApiProperty, ApiTags } from '@nestjs/swagger';
 import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { WORKFLOW_RETRY_AFTER_SECONDS } from '../http/workflow-response';
 import { ProjectRunsService, type TaskCommand } from './project-runs.service';
 import { ProjectRunState } from './project-run.entity';
 
@@ -117,7 +118,7 @@ export class ProjectRunsController {
   @Post(':id/tasks/:taskId/defer') defer(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('taskId') taskId: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) { return this.command(user.id, id, taskId, 'defer', version, key); }
   @Post(':id/tasks/:taskId/block') block(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('taskId') taskId: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string, @Body() body: Record<string, unknown>) { return this.command(user.id, id, taskId, 'block', version, key, body); }
   @Post(':id/tasks/:taskId/resume') resume(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('taskId') taskId: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) { return this.command(user.id, id, taskId, 'resume', version, key); }
-  @Post(':id/tasks/:taskId/verify') @HttpCode(202) verify(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('taskId') taskId: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) { return this.command(user.id, id, taskId, 'verify', version, key); }
+  @Post(':id/tasks/:taskId/verify') @HttpCode(202) @Header('Retry-After', WORKFLOW_RETRY_AFTER_SECONDS) verify(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('taskId') taskId: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) { return this.command(user.id, id, taskId, 'verify', version, key); }
 
   @Post(':id/archive')
   archive(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) {
@@ -125,7 +126,7 @@ export class ProjectRunsController {
     return this.runs.archive(user.id, id, parsed.version, parsed.key);
   }
 
-  @Post(':id/reverify') @HttpCode(202)
+  @Post(':id/reverify') @HttpCode(202) @Header('Retry-After', WORKFLOW_RETRY_AFTER_SECONDS)
   reverify(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) { const parsed = this.headers(version, key); return this.runs.reverify(user.id, id, parsed.version, parsed.key); }
 
   @Post(':id/publish')

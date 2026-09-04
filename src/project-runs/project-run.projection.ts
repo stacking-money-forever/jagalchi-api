@@ -3,6 +3,13 @@ import { ProjectRunState, type ProjectRunProjection, type ProjectTaskState } fro
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TASK_STATES = new Set<ProjectTaskState>(['LOCKED', 'READY', 'IN_PROGRESS', 'BLOCKED', 'DEFERRED', 'VERIFYING', 'DONE']);
+const ROOT_REQUIRED = ['id', 'state', 'version', 'currentTaskId', 'recommendedTaskId', 'plan', 'map', 'tasks', 'proof'] as const;
+const ROOT_OPTIONAL = ['target', 'citations', 'gaps', 'repositoryBinding'] as const;
+const TASK_REQUIRED = ['id', 'title', 'state', 'required', 'milestoneId', 'prerequisiteIds', 'purpose', 'acceptanceCriteria', 'evidenceRequirements'] as const;
+const TASK_OPTIONAL = ['citationIds', 'gapIds', 'verificationFailure'] as const;
+const FACTS_REQUIRED = ['snapshotId', 'verificationLevel', 'provider', 'repositoryId', 'pullNumber', 'headSha', 'observedAt', 'evaluations'] as const;
+const FACTS_OPTIONAL = ['repositoryName', 'taskKey', 'pullUrl'] as const;
+
 const exact = (value: Record<string, unknown>, keys: string[]): boolean => {
   const actual = Object.keys(value).sort();
   return actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index]);
@@ -13,18 +20,48 @@ const nullableId = (value: unknown): boolean => value === null || id(value);
 const strings = (value: unknown, max: number): value is string[] => Array.isArray(value) && value.length <= max && value.every((item) => typeof item === 'string' && item.length > 0 && item.length <= 1000);
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const iso = (value: unknown): boolean => typeof value === 'string' && RFC3339.test(value) && !Number.isNaN(Date.parse(value));
+const isRootShape = (value: Record<string, unknown>): boolean => {
+  const keys = Object.keys(value);
+  if (!ROOT_REQUIRED.every((key) => keys.includes(key))) return false;
+  return keys.every((key) => ROOT_REQUIRED.includes(key as typeof ROOT_REQUIRED[number]) || ROOT_OPTIONAL.includes(key as typeof ROOT_OPTIONAL[number]));
+};
+
+const isTaskShape = (item: Record<string, unknown>): boolean => {
+  const keys = Object.keys(item);
+  if (!TASK_REQUIRED.every((key) => keys.includes(key))) return false;
+  return keys.every((key) => TASK_REQUIRED.includes(key as typeof TASK_REQUIRED[number]) || TASK_OPTIONAL.includes(key as typeof TASK_OPTIONAL[number]));
+};
+
+const isCitation = (value: unknown): boolean => record(value) && exact(value, ['id', 'label', 'quote']) && id(value.id) && typeof value.label === 'string' && value.label.length > 0 && value.label.length <= 300 && (value.quote === null || (typeof value.quote === 'string' && value.quote.length <= 2000));
+const isGap = (value: unknown): boolean => record(value) && exact(value, ['id', 'description']) && id(value.id) && typeof value.description === 'string' && value.description.length > 0 && value.description.length <= 2000;
+const isRepositoryBinding = (value: unknown): boolean => record(value) && exact(value, ['repositoryName', 'pullNumber', 'headSha', 'pullUrl'])
+  && (value.repositoryName === null || (typeof value.repositoryName === 'string' && value.repositoryName.length > 0 && value.repositoryName.length <= 255))
+  && (value.pullNumber === null || (Number.isInteger(value.pullNumber) && Number(value.pullNumber) > 0))
+  && (value.headSha === null || (typeof value.headSha === 'string' && /^[0-9a-f]{40}$/.test(value.headSha)))
+  && (value.pullUrl === null || (typeof value.pullUrl === 'string' && value.pullUrl.length <= 500));
+
+const isFactsShape = (facts: Record<string, unknown>): boolean => {
+  const keys = Object.keys(facts);
+  if (!FACTS_REQUIRED.every((key) => keys.includes(key))) return false;
+  return keys.every((key) => FACTS_REQUIRED.includes(key as typeof FACTS_REQUIRED[number]) || FACTS_OPTIONAL.includes(key as typeof FACTS_OPTIONAL[number]));
+};
 
 export function isProjectRunProjection(value: unknown): value is ProjectRunProjection {
-  if (!record(value) || !(exact(value, ['id', 'state', 'version', 'currentTaskId', 'recommendedTaskId', 'plan', 'map', 'tasks', 'proof']) || exact(value, ['id', 'state', 'version', 'target', 'currentTaskId', 'recommendedTaskId', 'plan', 'map', 'tasks', 'proof']))) return false;
+  if (!record(value) || !isRootShape(value)) return false;
   if (typeof value.id !== 'string' || !UUID.test(value.id) || !Object.values(ProjectRunState).includes(value.state as ProjectRunState) || !Number.isInteger(value.version) || Number(value.version) < 1 || !nullableId(value.currentTaskId) || !nullableId(value.recommendedTaskId)) return false;
   if (value.target !== undefined && (!record(value.target) || !exact(value.target, ['company', 'role']) || typeof value.target.company !== 'string' || !value.target.company || value.target.company.length > 100 || typeof value.target.role !== 'string' || !value.target.role || value.target.role.length > 120)) return false;
+  if (value.citations !== undefined && (!Array.isArray(value.citations) || value.citations.length > 40 || !value.citations.every(isCitation))) return false;
+  if (value.gaps !== undefined && (!Array.isArray(value.gaps) || value.gaps.length > 40 || !value.gaps.every(isGap))) return false;
+  if (value.repositoryBinding !== undefined && !isRepositoryBinding(value.repositoryBinding)) return false;
   if (!record(value.plan) || !exact(value.plan, ['id', 'schemaVersion']) || !id(value.plan.id) || !Number.isInteger(value.plan.schemaVersion) || Number(value.plan.schemaVersion) < 1) return false;
   if (!record(value.map) || !exact(value.map, ['nodes', 'edges']) || !Array.isArray(value.map.nodes) || value.map.nodes.length > 40 || !Array.isArray(value.map.edges) || value.map.edges.length > 120) return false;
   if (!Array.isArray(value.tasks) || value.tasks.length > 40) return false;
   const taskIds = new Set<string>();
   for (const item of value.tasks) {
-    if (!record(item) || !(exact(item, ['id', 'title', 'state', 'required', 'milestoneId', 'prerequisiteIds', 'purpose', 'acceptanceCriteria', 'evidenceRequirements']) || exact(item, ['id', 'title', 'state', 'required', 'milestoneId', 'prerequisiteIds', 'purpose', 'acceptanceCriteria', 'evidenceRequirements', 'verificationFailure']))) return false;
+    if (!record(item) || !isTaskShape(item)) return false;
     if (!id(item.id) || taskIds.has(item.id) || typeof item.title !== 'string' || item.title.length < 1 || item.title.length > 300 || !TASK_STATES.has(item.state as ProjectTaskState) || typeof item.required !== 'boolean' || !nullableId(item.milestoneId) || !Array.isArray(item.prerequisiteIds) || item.prerequisiteIds.length > 3 || !item.prerequisiteIds.every(id) || typeof item.purpose !== 'string' || item.purpose.length > 2000 || !strings(item.acceptanceCriteria, 20) || !strings(item.evidenceRequirements, 20)) return false;
+    if (item.citationIds !== undefined && !strings(item.citationIds, 20)) return false;
+    if (item.gapIds !== undefined && !strings(item.gapIds, 20)) return false;
     taskIds.add(item.id);
     if (item.verificationFailure !== undefined && item.verificationFailure !== null && (!record(item.verificationFailure) || !exact(item.verificationFailure, ['code', 'note']) || !id(item.verificationFailure.code) || !(item.verificationFailure.note === null || (typeof item.verificationFailure.note === 'string' && item.verificationFailure.note.length <= 1000)))) return false;
   }
@@ -50,11 +87,14 @@ export function isProjectRunProjection(value: unknown): value is ProjectRunProje
     && record(verification) && exact(verification, ['state', 'verifiedAt']) && ['PENDING', 'PASS', 'FAIL', 'STALE'].includes(String(verification.state)) && (verification.verifiedAt === null || iso(verification.verifiedAt));
   if (!baseValid || value.proof.facts === undefined) return baseValid;
   const facts = value.proof.facts;
-  return record(facts) && exact(facts, ['snapshotId', 'verificationLevel', 'provider', 'repositoryId', 'pullNumber', 'headSha', 'observedAt', 'evaluations'])
-    && typeof facts.snapshotId === 'string' && UUID.test(facts.snapshotId) && ['MACHINE_VERIFIED', 'INDEPENDENTLY_REVIEWED'].includes(String(facts.verificationLevel))
-    && ['fixture', 'github'].includes(String(facts.provider)) && typeof facts.repositoryId === 'string' && /^[1-9]\d{0,19}$/.test(facts.repositoryId)
-    && Number.isInteger(facts.pullNumber) && Number(facts.pullNumber) > 0 && typeof facts.headSha === 'string' && /^[0-9a-f]{40}$/.test(facts.headSha) && iso(facts.observedAt)
-    && Array.isArray(facts.evaluations) && facts.evaluations.length <= 20 && facts.evaluations.every((evaluation) => record(evaluation) && exact(evaluation, ['ruleId', 'type', 'passed', 'code']) && id(evaluation.ruleId) && ['MERGED_PR', 'BASE_BRANCH', 'CHANGED_PATH', 'NAMED_CHECK'].includes(String(evaluation.type)) && typeof evaluation.passed === 'boolean' && id(evaluation.code));
+  if (!record(facts) || !isFactsShape(facts)) return false;
+  if (typeof facts.snapshotId !== 'string' || !UUID.test(facts.snapshotId) || !['MACHINE_VERIFIED', 'INDEPENDENTLY_REVIEWED'].includes(String(facts.verificationLevel))
+    || !['fixture', 'github'].includes(String(facts.provider)) || typeof facts.repositoryId !== 'string' || !/^[1-9]\d{0,19}$/.test(facts.repositoryId)
+    || !Number.isInteger(facts.pullNumber) || Number(facts.pullNumber) <= 0 || typeof facts.headSha !== 'string' || !/^[0-9a-f]{40}$/.test(facts.headSha) || !iso(facts.observedAt)) return false;
+  if (facts.repositoryName !== undefined && (typeof facts.repositoryName !== 'string' || facts.repositoryName.length === 0 || facts.repositoryName.length > 255)) return false;
+  if (facts.taskKey !== undefined && facts.taskKey !== null && !id(facts.taskKey)) return false;
+  if (facts.pullUrl !== undefined && facts.pullUrl !== null && (typeof facts.pullUrl !== 'string' || facts.pullUrl.length > 500)) return false;
+  return Array.isArray(facts.evaluations) && facts.evaluations.length <= 20 && facts.evaluations.every((evaluation) => record(evaluation) && exact(evaluation, ['ruleId', 'type', 'passed', 'code']) && id(evaluation.ruleId) && ['MERGED_PR', 'BASE_BRANCH', 'CHANGED_PATH', 'NAMED_CHECK'].includes(String(evaluation.type)) && typeof evaluation.passed === 'boolean' && id(evaluation.code));
 }
 
 export function assertProjectRunProjection(value: unknown): asserts value is ProjectRunProjection {

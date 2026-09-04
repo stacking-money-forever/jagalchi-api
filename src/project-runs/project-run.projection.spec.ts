@@ -27,4 +27,25 @@ describe('ProjectRun projection validation', () => {
     dateOnly.proof = { summary: 'Proof', validUntil: '2026-09-03', publication: { state: 'ACTIVE', publicId: 'proof-1' }, verification: { state: 'PASS', verifiedAt: '2026-09-03' } };
     expect(isProjectRunProjection(dateOnly)).toBe(false);
   });
+  it('accepts repository binding and focus context', () => {
+    const value = {
+      ...projection(),
+      citations: [{ id: 'source-1', label: 'Requirement', quote: null }],
+      gaps: [{ id: 'gap-1', description: 'typescript' }],
+      repositoryBinding: { repositoryName: 'fixture/verification-repository', pullNumber: 17, headSha: 'a'.repeat(40), pullUrl: 'https://github.com/fixture/verification-repository/pull/17' },
+      tasks: [{ ...projection().tasks[0]!, citationIds: ['source-1'], gapIds: ['gap-1'] }],
+      proof: {
+        summary: 'Proof', validUntil: null,
+        publication: { state: 'ACTIVE', publicId: 'proof-1' },
+        verification: { state: 'PASS', verifiedAt: '2026-09-03T10:00:00Z' },
+        facts: {
+          snapshotId: '00000000-0000-4000-8000-000000000099', verificationLevel: 'MACHINE_VERIFIED', provider: 'fixture',
+          repositoryId: '9000001', repositoryName: 'fixture/verification-repository', pullNumber: 17, headSha: 'a'.repeat(40), observedAt: '2026-09-03T10:00:00Z',
+          taskKey: 'task-1', pullUrl: 'https://github.com/fixture/verification-repository/pull/17',
+          evaluations: [{ ruleId: 'rule-0', type: 'MERGED_PR', passed: true, code: 'PASS' }],
+        },
+      },
+    };
+    expect(isProjectRunProjection(value)).toBe(true);
+  });
 });

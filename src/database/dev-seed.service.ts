@@ -278,7 +278,7 @@ export class DevSeedService {
       const profile = manager.getRepository(CandidateProfileSnapshot);
       if (!await profile.exists({ where: { id: profileId } })) await profile.save(profile.create({ id: profileId, ownerId, state: SnapshotState.Confirmed, sourceSnapshotId: null, schemaVersion: 1, payload: { source: 'dev-seed', confirmed: true } }));
       const diff = manager.getRepository(CareerDiffSnapshot);
-      if (!await diff.exists({ where: { id: diffId } })) await diff.save(diff.create({ id: diffId, ownerId, careerTargetId: targetId, careerTargetVersionId: this.uuid(`target-version:${targetId}`), candidateProfileSnapshotId: profileId, state: SnapshotState.Confirmed, sourceSnapshotId: null, schemaVersion: 1, payload: { observed: [], inferred: [], missing: ['typescript'] } }));
+      if (!await diff.exists({ where: { id: diffId } })) await diff.save(diff.create({ id: diffId, ownerId, careerTargetId: targetId, careerTargetVersionId: this.uuid(`target-version:${targetId}`), candidateProfileSnapshotId: profileId, state: SnapshotState.Confirmed, sourceSnapshotId: null, schemaVersion: 1, payload: { observed: [], inferred: [], missing: [{ id: 'gap-1', description: 'typescript' }] } }));
       const sets = manager.getRepository(ProjectProposalSet);
       if (!await sets.exists({ where: { id: setId } })) await sets.save(sets.create({ id: setId, ownerId, careerDiffSnapshotId: diffId, schemaVersion: 1, payload: { source: 'dev-seed' } }));
       const proposals = manager.getRepository(ProjectProposal);
@@ -288,7 +288,15 @@ export class DevSeedService {
         if (!await proposals.exists({ where: { id } })) await proposals.save(proposals.create({ id, proposalSetId: setId, blueprintVersionId: blueprintId, rank, payload: { id: `local-seed-proposal-${rank}`, title: `Local seed proposal ${rank}`, projectBlueprintId: `blueprint-${rank}`, projectBlueprintVersion: 1, repositoryMode: rank === 1 ? 'MANUAL_GREENFIELD' : 'EXISTING_OWNED', citedGapIds: rank === 1 ? ['gap-1'] : [], citationIds: ['source-1'], boundedOutcome: 'Deliver a verified local feature slice.', nonGoals: ['No external provider access.'], durationHours: 20, difficulty: 'MEDIUM', evidenceRules: ['test:deterministic contract suite'], confidence: 1, rejectionReasons: [] } }));
       }
       const plans = manager.getRepository(ProjectPlanSnapshot);
-      if (!await plans.exists({ where: { id: planId } })) await plans.save(plans.create({ id: planId, ownerId, projectProposalId: this.uuid(`proposal:${setId}:1`), careerDiffSnapshotId: diffId, candidateProfileSnapshotId: profileId, blueprintVersionId: blueprintIds[0]!, catalogVersion: 'v1', schemaVersion: 1, payload: { taskIds: ['seed-task-1'] } }));
+      if (!await plans.exists({ where: { id: planId } })) await plans.save(plans.create({ id: planId, ownerId, projectProposalId: this.uuid(`proposal:${setId}:1`), careerDiffSnapshotId: diffId, candidateProfileSnapshotId: profileId, blueprintVersionId: blueprintIds[0]!, catalogVersion: 'v1', schemaVersion: 1, payload: {
+          id: 'local-seed-plan-v1',
+          schemaVersion: 1,
+          tasks: [{
+            id: 'seed-task-1',
+            citationIds: ['source-1'],
+            gapIds: ['gap-1'],
+          }],
+        } }));
       for (const blueprintId of blueprintIds) await manager.getRepository(ProjectBlueprintVersion).findOneByOrFail({ id: blueprintId });
     });
     return planId;
@@ -322,12 +330,16 @@ export class DevSeedService {
         nodes: [{ id: 'seed-task-1', title: 'Complete the verified local task', milestoneId: 'seed-milestone-1', state: 'READY' }],
         edges: [],
       },
+      citations: [{ id: 'source-1', label: 'Local seed requirement', quote: SEED_REQUIREMENTS }],
+      gaps: [{ id: 'gap-1', description: 'typescript' }],
       tasks: [{
         id: 'seed-task-1', title: 'Complete the verified local task', state: 'READY', required: true,
         milestoneId: 'seed-milestone-1', prerequisiteIds: [],
         purpose: 'Exercise the real Project Run and Proof boundaries locally.',
         acceptanceCriteria: ['The configured verification adapter passes.'],
-        evidenceRequirements: ['A bound pull request and required check pass.'],
+        evidenceRequirements: ['PR', 'CHANGED_PATH:src/core.ts', 'NAMED_CHECK:ci/test'],
+        citationIds: ['source-1'],
+        gapIds: ['gap-1'],
       }],
       proof: null,
     };

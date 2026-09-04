@@ -13,6 +13,7 @@ import {
   ProjectFeature, ProjectFeatureEntitlement, ProjectProposal, ProjectProposalSet, RepositoryMode, SnapshotState,
 } from '../project-runs/product-spine.entities';
 import type { ProjectRunProjection } from '../project-runs/project-run.entity';
+import { buildFocusContext } from '../project-runs/project-run.focus-context';
 import { ExecutionOrchestrationService } from '../execution-orchestration/execution-orchestration.service';
 import { WorkflowOperationHandlers } from '../workflow-operations/workflow-operation.worker';
 import { WorkflowOperation, WorkflowOperationResult, WorkflowOperationState } from '../workflow-operations/workflow-operation.entities';
@@ -143,7 +144,8 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
     const artifact = (ai.result as { artifact: Record<string, unknown> }).artifact;
     if (artifact.projectBlueprintId !== proposal.payload.projectBlueprintId || artifact.projectBlueprintVersion !== proposal.payload.projectBlueprintVersion) throw new AiContractInvalidError('$.result.artifact.projectBlueprintId');
     const tasks = this.validatePlan(artifact, ai, diff, targetVersion, proposal);
-    const projection: Omit<ProjectRunProjection, 'id' | 'state' | 'version'> = { target: { company: target.company, role: target.role }, currentTaskId: null, recommendedTaskId: tasks[0]?.id ?? null, plan: { id: String(artifact.id), schemaVersion: 1 }, map: { nodes: tasks.map((task) => ({ id: task.id, title: task.title, milestoneId: task.milestoneId, state: task.state })), edges: tasks.flatMap((task, i) => task.prerequisiteIds.map((source, j) => ({ id: `edge-${i}-${j}`, source, target: task.id, kind: 'PREREQUISITE' as const }))) }, tasks, proof: null };
+    const focus = buildFocusContext(null, diff, targetVersion);
+    const projection: Omit<ProjectRunProjection, 'id' | 'state' | 'version'> = { target: { company: target.company, role: target.role }, currentTaskId: null, recommendedTaskId: tasks[0]?.id ?? null, plan: { id: String(artifact.id), schemaVersion: 1 }, map: { nodes: tasks.map((task) => ({ id: task.id, title: task.title, milestoneId: task.milestoneId, state: task.state })), edges: tasks.flatMap((task, i) => task.prerequisiteIds.map((source, j) => ({ id: `edge-${i}-${j}`, source, target: task.id, kind: 'PREREQUISITE' as const }))) }, citations: focus.citations, gaps: focus.gaps, tasks, proof: null };
     return this.complete(operation, signal, async (manager) => {
       const lockedProposal = await manager.getRepository(ProjectProposal).findOne({ where: { id: proposal.id }, lock: { mode: 'pessimistic_read' } });
       const lockedSet = lockedProposal ? await manager.getRepository(ProjectProposalSet).findOne({ where: { id: lockedProposal.proposalSetId, ownerId: operation.ownerId, careerDiffSnapshotId: diff.id }, lock: { mode: 'pessimistic_read' } }) : null;
@@ -195,7 +197,7 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
       const rules = task.evidenceRules as string[];
       const evidence = ['PR', ...rules.map((rule) => rule.startsWith('pr:changed-path:') ? `CHANGED_PATH:${rule.slice(16)}` : rule.startsWith('pr:named-check:') ? `NAMED_CHECK:${rule.slice(15)}` : rule.startsWith('test:') ? 'NAMED_CHECK:ci/test' : 'UNSUPPORTED')];
       if (!evidence.every((rule) => ['PR', 'CHANGED_PATH', 'NAMED_CHECK', 'BASE_BRANCH'].some((allowed) => rule === allowed || rule.startsWith(`${allowed}:`)))) throw Object.assign(new Error('Unsupported evidence rule'), { code: 'EVIDENCE_RULE_UNSUPPORTED' });
-      return { id: String(task.id), title: String(task.title), state: (index === 0 ? 'READY' : 'LOCKED') as 'READY' | 'LOCKED', required: true, milestoneId: String(task.milestoneId), prerequisiteIds: task.prerequisiteIds as string[], purpose: String(task.purpose), acceptanceCriteria: task.acceptanceCriteria as string[], evidenceRequirements: evidence };
+      return { id: String(task.id), title: String(task.title), state: (index === 0 ? 'READY' : 'LOCKED') as 'READY' | 'LOCKED', required: true, milestoneId: String(task.milestoneId), prerequisiteIds: task.prerequisiteIds as string[], purpose: String(task.purpose), acceptanceCriteria: task.acceptanceCriteria as string[], evidenceRequirements: evidence, citationIds: citations, gapIds: gaps };
     }).map((task, index, result) => { if (index === result.length - 1 && [...gapIds].some((id) => !covered.has(id))) throw new AiContractInvalidError('$.result.artifact.tasks.uncoveredGaps'); return task; });
   }
 

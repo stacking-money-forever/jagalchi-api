@@ -1,0 +1,1 @@
+export const WORKFLOW_RETRY_AFTER_SECONDS = '2';

@@ -4,6 +4,24 @@ export enum ProjectRunState {
   Ready = 'READY', Active = 'ACTIVE', Blocked = 'BLOCKED', Completed = 'COMPLETED', Archived = 'ARCHIVED',
 }
 
+export interface ProjectRunRepositoryBinding {
+  repositoryName: string | null;
+  pullNumber: number | null;
+  headSha: string | null;
+  pullUrl: string | null;
+}
+
+export interface ProjectRunFocusCitation {
+  id: string;
+  label: string;
+  quote: string | null;
+}
+
+export interface ProjectRunFocusGap {
+  id: string;
+  description: string;
+}
+
 export interface ProjectRunProjection {
   id: string;
   state: ProjectRunState;
@@ -19,15 +37,22 @@ export interface ProjectRunProjection {
   tasks: Array<{
     id: string; title: string; state: ProjectTaskState; required: boolean; milestoneId: string | null;
     prerequisiteIds: string[]; purpose: string; acceptanceCriteria: string[]; evidenceRequirements: string[];
+    citationIds?: string[];
+    gapIds?: string[];
     verificationFailure?: { code: string; note: string | null } | null;
   }>;
+  citations?: ProjectRunFocusCitation[];
+  gaps?: ProjectRunFocusGap[];
+  repositoryBinding?: ProjectRunRepositoryBinding;
   proof: {
     summary: string; validUntil: string | null;
     publication: { state: 'ACTIVE' | 'UNPUBLISHED' | 'INVALIDATED'; publicId: string | null };
     verification: { state: 'PENDING' | 'PASS' | 'FAIL' | 'STALE'; verifiedAt: string | null };
     facts?: {
       snapshotId: string; verificationLevel: 'MACHINE_VERIFIED' | 'INDEPENDENTLY_REVIEWED'; provider: 'fixture' | 'github';
-      repositoryId: string; pullNumber: number; headSha: string; observedAt: string;
+      repositoryId: string; repositoryName?: string; pullNumber: number; headSha: string; observedAt: string;
+      taskKey?: string | null;
+      pullUrl?: string | null;
       evaluations: Array<{ ruleId: string; type: 'MERGED_PR' | 'BASE_BRANCH' | 'CHANGED_PATH' | 'NAMED_CHECK'; passed: boolean; code: string }>;
     };
   } | null;
