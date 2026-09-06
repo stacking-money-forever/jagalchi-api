@@ -12,14 +12,22 @@ const fence = {
   rules: [{ id: 'merged', type: 'MERGED_PR' as const }],
 };
 
-function setup(scenario: 'success' | 'failure' | 'drift' | 'unavailable') {
+function setup(
+  scenario: 'success' | 'failure' | 'drift' | 'unavailable',
+  pullNumber = FIXTURE_VERIFICATION_IDS.pullNumber,
+) {
   const registry = new WorkflowOperationHandlers();
-  const subject = new TaskVerificationHandler({} as never, { get: (key: string) => key === 'GITHUB_PROVIDER' ? 'fixture' : 'true' } as never, registry, new FixtureVerificationProvider(scenario));
-  vi.spyOn(subject as never, 'readFence').mockResolvedValue(fence as never);
+  const provider = new FixtureVerificationProvider(scenario);
+  const subject = new TaskVerificationHandler({} as never, { get: (key: string) => key === 'GITHUB_PROVIDER' ? 'fixture' : 'true' } as never, registry, provider);
+  const selectedFence = {
+    ...fence,
+    binding: { ...fence.binding, pullNumber },
+  };
+  vi.spyOn(subject as never, 'readFence').mockResolvedValue(selectedFence as never);
   const success = vi.spyOn(subject as never, 'commitResult').mockResolvedValue({ status: 'PASS' } as never);
   const failure = vi.spyOn(subject as never, 'commitFailure').mockResolvedValue({ status: 'FAIL' } as never);
   subject.onModuleInit();
-  return { handler: registry.get('TASK_VERIFICATION')!, success, failure };
+  return { handler: registry.get('TASK_VERIFICATION')!, success, failure, provider, selectedFence };
 }
 
 describe('TaskVerificationHandler fixture integration', () => {
@@ -43,6 +51,18 @@ describe('TaskVerificationHandler fixture integration', () => {
   it('returns failed evidence without fabricating a Proof snapshot', async () => {
     const subject = setup('failure'); subject.success.mockResolvedValue({ status: 'FAIL' } as never); await expect(subject.handler(operation, new AbortController().signal)).resolves.toEqual({ status: 'FAIL' });
     expect(subject.success).toHaveBeenCalledWith(operation, fence, expect.objectContaining({ status: 'FAIL' }));
+  });
+  it('advances the dedicated fixture failure only after its failed result is committed', async () => {
+    const subject = setup('success', FIXTURE_VERIFICATION_IDS.failurePullNumber);
+    subject.success.mockResolvedValue({ status: 'FAIL' } as never);
+    const advance = vi.spyOn(subject.provider, 'advanceFailureRecovery');
+    await expect(subject.handler(operation, new AbortController().signal)).resolves.toEqual({ status: 'FAIL' });
+    expect(subject.success).toHaveBeenCalledWith(
+      operation,
+      subject.selectedFence,
+      expect.objectContaining({ status: 'FAIL' }),
+    );
+    expect(advance).toHaveBeenCalledOnce();
   });
   it('detects provider drift and routes it to closed failure without a success commit', async () => {
     const subject = setup('drift'); await expect(subject.handler(operation, new AbortController().signal)).resolves.toEqual({ status: 'FAIL' });

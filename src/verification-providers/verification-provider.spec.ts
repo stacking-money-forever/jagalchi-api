@@ -116,6 +116,12 @@ describe('FixtureVerificationProvider', () => {
     const proof = subject.evaluate(facts, rules, fence());
     expect(facts.pullNumber).toBe(FIXTURE_VERIFICATION_IDS.failurePullNumber);
     expect(proof.status).toBe('FAIL');
+    subject.advanceFailureRecovery();
+    const recoveredFacts = await subject.getPullRequestFacts({
+      ...pullRequestSelector,
+      pullNumber: FIXTURE_VERIFICATION_IDS.failurePullNumber,
+    });
+    expect(subject.evaluate(recoveredFacts, rules, fence()).status).toBe('PASS');
   });
 
   it('emits deterministic invalidations and fences stale head facts after drift', async () => {

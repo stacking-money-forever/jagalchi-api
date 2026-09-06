@@ -15,10 +15,11 @@ are deterministic:
   emits closed invalidation events;
 - `unavailable`: returns only the redacted provider-unavailable error.
 
-The dedicated fixture PR `43` returns the same deterministic `failure` facts even when the
-default provider scenario is `success`. This supports a failure-to-recovery browser leg on one
-local stack without recycling services or mutating the database out of band. Fixture PR `42`
-remains the passing path.
+The dedicated fixture PR `43` returns deterministic `failure` facts for its first verification
+attempt and advances to the same passing facts after that failed result is committed. This models
+an external check being repaired and supports a same-PR failure-to-recovery browser leg without
+recycling services, rebinding immutable evidence, or mutating the database out of band. Fixture
+PR `42` remains the immediately passing path.
 
 The evaluator accepts only `MERGED_PR`, `BASE_BRANCH`, `CHANGED_PATH`, and
 `NAMED_CHECK`. Human review is intentionally outside machine verification.

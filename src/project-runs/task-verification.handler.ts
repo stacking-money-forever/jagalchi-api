@@ -78,7 +78,14 @@ export class TaskVerificationHandler implements OnModuleInit {
       if (error instanceof VerificationProviderError) return this.commitFailure(operation, fence, error.code);
       throw error;
     }
-    return this.commitResult(operation, fence, proof);
+    const result = await this.commitResult(operation, fence, proof);
+    if (
+      proof.status === 'FAIL'
+      && fence.binding.pullNumber === FIXTURE_VERIFICATION_IDS.failurePullNumber
+    ) {
+      this.provider.advanceFailureRecovery();
+    }
+    return result;
   }
 
   private readFence(operation: WorkflowOperation) {

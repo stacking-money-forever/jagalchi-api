@@ -92,6 +92,7 @@ implements VerificationProviderPort, TaskEvidenceEvaluatorPort, VerificationInva
   readonly provider = 'fixture' as const;
   private readonly evaluator = new DeterministicTaskEvidenceEvaluator();
   private drifted = false;
+  private failureRecovered = false;
   private events: VerificationInvalidationEvent[] = [];
 
   constructor(readonly scenario: FixtureVerificationScenario = 'success') {}
@@ -120,7 +121,7 @@ implements VerificationProviderPort, TaskEvidenceEvaluatorPort, VerificationInva
       throw new VerificationProviderError('PULL_REQUEST_NOT_FOUND');
     }
     const scenario = selector.pullNumber === FIXTURE_VERIFICATION_IDS.failurePullNumber
-      ? 'failure'
+      ? (this.failureRecovered ? 'success' : 'failure')
       : this.scenario;
     return pullRequestFacts(scenario, this.drifted, selector.pullNumber);
   }
@@ -137,6 +138,10 @@ implements VerificationProviderPort, TaskEvidenceEvaluatorPort, VerificationInva
   advanceDrift(): void {
     if (this.scenario !== 'drift') return;
     this.triggerExternalDrift();
+  }
+
+  advanceFailureRecovery(): void {
+    this.failureRecovered = true;
   }
 
   triggerExternalDrift(): void {
