@@ -15,6 +15,7 @@ const FEATURE_FLAGS = [
   "PROJECT_RUNS_ENABLED",
 ] as const;
 const MAX_E2E_COMPLETION_IP_LIMIT = 100;
+const MAX_E2E_COMPLETION_ACCOUNT_LIMIT = 200;
 
 const required = (environment: Environment, key: string): string => {
   const value = environment[key]?.trim();
@@ -147,6 +148,9 @@ export const validateEnvironment = (environment: Environment): Environment => {
   if (production && environment.E2E_COMPLETION_IP_LIMIT !== undefined) {
     throw new Error("E2E_COMPLETION_IP_LIMIT is not allowed in production");
   }
+  if (production && environment.E2E_COMPLETION_ACCOUNT_LIMIT !== undefined) {
+    throw new Error("E2E_COMPLETION_ACCOUNT_LIMIT is not allowed in production");
+  }
   for (const key of FEATURE_FLAGS) {
     if (production) requiredBoolean(environment, key);
     else if (
@@ -245,6 +249,10 @@ export const validateEnvironment = (environment: Environment): Environment => {
   optionalInteger(environment, "E2E_COMPLETION_IP_LIMIT", {
     min: 1,
     max: MAX_E2E_COMPLETION_IP_LIMIT,
+  });
+  optionalInteger(environment, "E2E_COMPLETION_ACCOUNT_LIMIT", {
+    min: 1,
+    max: MAX_E2E_COMPLETION_ACCOUNT_LIMIT,
   });
   const aiTimeoutMs = Number(environment.AI_TIMEOUT_MS);
   const leaseMs = Number(environment.WORKFLOW_LEASE_MS);

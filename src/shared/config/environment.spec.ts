@@ -103,6 +103,38 @@ describe("validateEnvironment", () => {
     expect(environment.E2E_COMPLETION_IP_LIMIT).toBe("25");
   });
 
+  it("accepts a bounded non-production completion account override", () => {
+    const environment = {
+      ...productionEnvironment(),
+      NODE_ENV: "development",
+      E2E_COMPLETION_ACCOUNT_LIMIT: "100",
+    };
+    expect(validateEnvironment(environment)).toBe(environment);
+    expect(environment.E2E_COMPLETION_ACCOUNT_LIMIT).toBe("100");
+  });
+
+  it.each(["0", "201", "1.5", "-1"])(
+    "rejects an invalid non-production completion account override %s",
+    (value) => {
+      expect(() =>
+        validateEnvironment({
+          ...productionEnvironment(),
+          NODE_ENV: "development",
+          E2E_COMPLETION_ACCOUNT_LIMIT: value,
+        }),
+      ).toThrow("E2E_COMPLETION_ACCOUNT_LIMIT must be an integer between 1 and 200");
+    },
+  );
+
+  it("rejects the E2E completion account override in production", () => {
+    expect(() =>
+      validateEnvironment({
+        ...productionEnvironment(),
+        E2E_COMPLETION_ACCOUNT_LIMIT: "100",
+      }),
+    ).toThrow("E2E_COMPLETION_ACCOUNT_LIMIT is not allowed in production");
+  });
+
   it.each(["0", "101", "1.5", "-1"])(
     "rejects an invalid non-production completion IP override %s",
     (value) => {

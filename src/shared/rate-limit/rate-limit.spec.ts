@@ -14,7 +14,7 @@ const contextFor = (request: Record<string, unknown>, policy?: 'entry' | 'reques
 };
 
 describe('createRateLimitOptions', () => {
-  const create = (configValues: { nodeEnv?: string; completionIpLimit?: string; anonymousLimit?: string; signedUserLimit?: string } = {}) => {
+  const create = (configValues: { nodeEnv?: string; completionIpLimit?: string; completionAccountLimit?: string; anonymousLimit?: string; signedUserLimit?: string } = {}) => {
     const jwt = {
       verifyAsync: vi.fn(async (token: string) => {
         if (token !== 'valid') throw new Error('invalid token');
@@ -26,6 +26,7 @@ describe('createRateLimitOptions', () => {
       get: vi.fn((key: string) => {
         if (key === 'NODE_ENV') return configValues.nodeEnv;
         if (key === 'E2E_COMPLETION_IP_LIMIT') return configValues.completionIpLimit;
+        if (key === 'E2E_COMPLETION_ACCOUNT_LIMIT') return configValues.completionAccountLimit;
         if (key === 'E2E_DEFAULT_ANONYMOUS_LIMIT') return configValues.anonymousLimit;
         if (key === 'E2E_DEFAULT_SIGNED_USER_LIMIT') return configValues.signedUserLimit;
         return undefined;
@@ -48,9 +49,19 @@ describe('createRateLimitOptions', () => {
     expect(options.throttlers.find((item) => item.name === 'completionAccount')?.limit).toBe(20);
   });
 
+  it('uses the non-production completion account override for browser acceptance', () => {
+    const { options } = create({ nodeEnv: 'development', completionAccountLimit: '100' });
+    expect(options.throttlers.find((item) => item.name === 'completionAccount')?.limit).toBe(100);
+  });
+
   it('keeps the production completion IP limit hard at 10', () => {
-    const { options } = create({ nodeEnv: 'production', completionIpLimit: '25' });
+    const { options } = create({
+      nodeEnv: 'production',
+      completionIpLimit: '25',
+      completionAccountLimit: '100',
+    });
     expect(options.throttlers.find((item) => item.name === 'completionIp')?.limit).toBe(10);
+    expect(options.throttlers.find((item) => item.name === 'completionAccount')?.limit).toBe(20);
   });
 
   it('uses 60/min for anonymous requests and 120/min for signed users', async () => {

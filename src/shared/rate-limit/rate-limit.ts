@@ -6,6 +6,7 @@ import type { ThrottlerModuleOptions } from '@nestjs/throttler';
 
 export const RATE_LIMIT_POLICY = 'jagalchi:rate-limit-policy';
 const DEFAULT_COMPLETION_IP_LIMIT = 10;
+const DEFAULT_COMPLETION_ACCOUNT_LIMIT = 20;
 const DEFAULT_ANONYMOUS_LIMIT = 60;
 const DEFAULT_SIGNED_USER_LIMIT = 120;
 export type RateLimitPolicy = 'entry' | 'request' | 'completion';
@@ -83,6 +84,12 @@ export const createRateLimitOptions = (
         config.get<string>('E2E_COMPLETION_IP_LIMIT') ??
           String(DEFAULT_COMPLETION_IP_LIMIT),
       );
+  const completionAccountLimit = production
+    ? DEFAULT_COMPLETION_ACCOUNT_LIMIT
+    : Number(
+        config.get<string>('E2E_COMPLETION_ACCOUNT_LIMIT') ??
+          String(DEFAULT_COMPLETION_ACCOUNT_LIMIT),
+      );
   const anonymousLimit = production
     ? DEFAULT_ANONYMOUS_LIMIT
     : Number(
@@ -129,7 +136,7 @@ export const createRateLimitOptions = (
       { name: 'requestIp', ttl: 3_600_000, limit: 10, skipIf: applies('request') },
       { name: 'requestAccount', ttl: 3_600_000, limit: 3, skipIf: applies('request') },
       { name: 'completionIp', ttl: 60_000, limit: completionIpLimit, skipIf: applies('completion') },
-      { name: 'completionAccount', ttl: 3_600_000, limit: 20, skipIf: applies('completion') },
+      { name: 'completionAccount', ttl: 3_600_000, limit: completionAccountLimit, skipIf: applies('completion') },
     ],
   };
 };
