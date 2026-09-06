@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
+import { AiModule } from '../ai/ai.module';
 import { ProjectRun } from './project-run.entity';
 import { ProjectRunsController } from './project-runs.controller';
 import { ProjectRunsService } from './project-runs.service';
@@ -15,7 +16,7 @@ import { ProofProfile } from '../career/career.entities';
 import { VerificationModule } from './verification.module';
 
 @Module({
-  imports: [AuthModule, VerificationModule, TypeOrmModule.forFeature([
+  imports: [AuthModule, AiModule, VerificationModule, TypeOrmModule.forFeature([
     ProjectRun, ProjectRunEntitlement, WorkflowOperation, CandidateProfileSnapshot,
     CareerDiffSnapshot, CareerTargetVersion, ProjectBlueprintVersion, ProjectFeatureEntitlement, ProjectPlanSnapshot,
     ProjectProposal, ProjectProposalSet, ProjectRepositoryBinding, ProjectRunCommand, ProjectTask,

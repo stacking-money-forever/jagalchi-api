@@ -8,7 +8,7 @@ import { ProofSnapshot, RepositoryInvalidationWatermark } from './product-spine.
 export class VerificationInvalidationService {
   constructor(private readonly dataSource: DataSource, @Inject(VERIFICATION_PROVIDER) private readonly provider: FixtureVerificationProvider) {}
   async advanceFixtureAndInvalidate(): Promise<number> {
-    this.provider.advanceDrift(); let affected = 0;
+    this.provider.triggerExternalDrift(); let affected = 0;
     for (const event of this.provider.takeInvalidationEvents()) {
       affected += await this.dataSource.transaction(async (manager) => {
         await manager.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`${event.provider}:${event.repositoryId}`]);

@@ -26,7 +26,7 @@ export class AiTokenService {
     );
   }
 
-  issueInternal(userId: string, permission: 'EXTRACT' | 'INTERPRET' | 'PROPOSE' | 'COMPILE'): string {
+  issueInternal(userId: string, permission: 'EXTRACT' | 'INTERPRET' | 'PROPOSE' | 'COMPILE' | 'FOCUS_TASK_HELP'): string {
     return this.jwt.sign(
       { permissions: [permission] },
       {

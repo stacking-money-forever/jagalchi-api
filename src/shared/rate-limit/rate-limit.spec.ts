@@ -14,7 +14,7 @@ const contextFor = (request: Record<string, unknown>, policy?: 'entry' | 'reques
 };
 
 describe('createRateLimitOptions', () => {
-  const create = (configValues: { nodeEnv?: string; completionIpLimit?: string } = {}) => {
+  const create = (configValues: { nodeEnv?: string; completionIpLimit?: string; anonymousLimit?: string; signedUserLimit?: string } = {}) => {
     const jwt = {
       verifyAsync: vi.fn(async (token: string) => {
         if (token !== 'valid') throw new Error('invalid token');
@@ -23,13 +23,13 @@ describe('createRateLimitOptions', () => {
     };
     const config = {
       getOrThrow: vi.fn(() => 's'.repeat(32)),
-      get: vi.fn((key: string) =>
-        key === 'NODE_ENV'
-          ? configValues.nodeEnv
-          : key === 'E2E_COMPLETION_IP_LIMIT'
-            ? configValues.completionIpLimit
-            : undefined,
-      ),
+      get: vi.fn((key: string) => {
+        if (key === 'NODE_ENV') return configValues.nodeEnv;
+        if (key === 'E2E_COMPLETION_IP_LIMIT') return configValues.completionIpLimit;
+        if (key === 'E2E_DEFAULT_ANONYMOUS_LIMIT') return configValues.anonymousLimit;
+        if (key === 'E2E_DEFAULT_SIGNED_USER_LIMIT') return configValues.signedUserLimit;
+        return undefined;
+      }),
     };
     const options = createRateLimitOptions(jwt as never, config as never) as Exclude<
       ReturnType<typeof createRateLimitOptions>,
@@ -66,6 +66,36 @@ describe('createRateLimitOptions', () => {
       ),
     ).resolves.toBe(120);
   });
+  it('uses non-production generic throttle overrides for browser acceptance', async () => {
+    const { options } = create({
+      nodeEnv: 'development',
+      anonymousLimit: '1000',
+      signedUserLimit: '2000',
+    });
+    const defaultThrottle = options.throttlers.find((item) => item.name === 'default');
+    const limit = defaultThrottle?.limit as (context: ExecutionContext) => Promise<number>;
+    await expect(limit(contextFor({ ip: '1.1.1.1', headers: {} }))).resolves.toBe(1000);
+    await expect(
+      limit(contextFor({ ip: '1.1.1.1', headers: { authorization: 'Bearer valid' } })),
+    ).resolves.toBe(2000);
+    expect(options.throttlers.find((item) => item.name === 'ip')?.limit).toBe(1000);
+  });
+
+  it('ignores generic throttle overrides in production', async () => {
+    const { options } = create({
+      nodeEnv: 'production',
+      anonymousLimit: '1000',
+      signedUserLimit: '2000',
+    });
+    const defaultThrottle = options.throttlers.find((item) => item.name === 'default');
+    const limit = defaultThrottle?.limit as (context: ExecutionContext) => Promise<number>;
+    await expect(limit(contextFor({ ip: '1.1.1.1', headers: {} }))).resolves.toBe(60);
+    await expect(
+      limit(contextFor({ ip: '1.1.1.1', headers: { authorization: 'Bearer valid' } })),
+    ).resolves.toBe(120);
+    expect(options.throttlers.find((item) => item.name === 'ip')?.limit).toBe(60);
+  });
+
 
   it('hashes normalized account identifiers and never embeds plaintext tracker values in keys', async () => {
     const { options } = create();

@@ -6,7 +6,7 @@ describe('VerificationInvalidationService', () => {
   it('invalidates only publications from fixture events and never updates immutable snapshots', async () => {
     const query = vi.fn(async (sql: string) => sql.includes('RETURNING provider_event_id') ? [{ provider_event_id: 'event' }] : sql.includes('RETURNING generation') ? [{ generation: 1 }] : sql.includes('RETURNING publication.id') ? [{ id: 'publication' }] : []);
     const transaction = vi.fn((callback) => callback({ query }));
-    const provider = new FixtureVerificationProvider('drift');
+    const provider = new FixtureVerificationProvider('success');
     const service = new VerificationInvalidationService({ transaction } as never, provider);
     await expect(service.advanceFixtureAndInvalidate()).resolves.toBe(2);
     expect(transaction).toHaveBeenCalledTimes(2);

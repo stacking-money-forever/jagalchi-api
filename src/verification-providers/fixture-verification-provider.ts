@@ -25,7 +25,8 @@ export const FIXTURE_VERIFICATION_IDS = Object.freeze({
   ownerId: 'fixture-owner',
   installationId: 'fixture-installation',
   repositoryId: '9000001',
-  pullNumber: 17,
+  pullNumber: 42,
+  failurePullNumber: 43,
   initialHeadSha: 'a'.repeat(40),
   driftedHeadSha: 'b'.repeat(40),
 });
@@ -55,14 +56,18 @@ function binding(): RepositoryBindingFacts {
   return deepFreeze(result);
 }
 
-function pullRequestFacts(scenario: FixtureVerificationScenario, drifted: boolean): PullRequestFacts {
+function pullRequestFacts(
+  scenario: FixtureVerificationScenario,
+  drifted: boolean,
+  pullNumber: number,
+): PullRequestFacts {
   const failed = scenario === 'failure';
   const changed = scenario === 'drift' && drifted;
   const facts = {
     schemaVersion: 1 as const,
     provider: 'fixture' as const,
     repositoryId: FIXTURE_VERIFICATION_IDS.repositoryId,
-    pullNumber: FIXTURE_VERIFICATION_IDS.pullNumber,
+    pullNumber,
     headSha: changed ? FIXTURE_VERIFICATION_IDS.driftedHeadSha : FIXTURE_VERIFICATION_IDS.initialHeadSha,
     baseBranch: 'main',
     state: failed ? 'OPEN' as const : 'MERGED' as const,
@@ -108,10 +113,16 @@ implements VerificationProviderPort, TaskEvidenceEvaluatorPort, VerificationInva
     if (selector.repositoryId !== FIXTURE_VERIFICATION_IDS.repositoryId) {
       throw new VerificationProviderError('REPOSITORY_NOT_AUTHORIZED');
     }
-    if (selector.pullNumber !== FIXTURE_VERIFICATION_IDS.pullNumber) {
+    if (
+      selector.pullNumber !== FIXTURE_VERIFICATION_IDS.pullNumber
+      && selector.pullNumber !== FIXTURE_VERIFICATION_IDS.failurePullNumber
+    ) {
       throw new VerificationProviderError('PULL_REQUEST_NOT_FOUND');
     }
-    return pullRequestFacts(this.scenario, this.drifted);
+    const scenario = selector.pullNumber === FIXTURE_VERIFICATION_IDS.failurePullNumber
+      ? 'failure'
+      : this.scenario;
+    return pullRequestFacts(scenario, this.drifted, selector.pullNumber);
   }
 
   evaluate(
@@ -124,7 +135,12 @@ implements VerificationProviderPort, TaskEvidenceEvaluatorPort, VerificationInva
   }
 
   advanceDrift(): void {
-    if (this.scenario !== 'drift' || this.drifted) return;
+    if (this.scenario !== 'drift') return;
+    this.triggerExternalDrift();
+  }
+
+  triggerExternalDrift(): void {
+    if (this.drifted) return;
     this.drifted = true;
     this.events = [
       deepFreeze({

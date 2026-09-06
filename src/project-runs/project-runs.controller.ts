@@ -1,11 +1,11 @@
 import { BadRequestException, Body, Controller, Get, Header, Headers, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
-import { ApiBearerAuth, ApiOkResponse, ApiParam, ApiProperty, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiParam, ApiProperty, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WORKFLOW_RETRY_AFTER_SECONDS } from '../http/workflow-response';
-import { BindProjectRunPullRequestDto } from './project-runs.dto';
+import { BindProjectRunPullRequestDto, ProjectRunAiHelpRequestDto, ProjectRunAiHelpResponseDto } from './project-runs.dto';
 import { ProjectRunsService, type TaskCommand } from './project-runs.service';
 import { ProjectRunState } from './project-run.entity';
 
@@ -29,6 +29,10 @@ class ProjectRunPlanDto {
   @ApiProperty({ type: 'integer', minimum: 1 }) schemaVersion: number;
   @ApiProperty({ required: false, type: ProjectRunPlanProvenanceDto }) provenance?: ProjectRunPlanProvenanceDto;
 }
+class ProjectRunTargetDto {
+  @ApiProperty({ type: String, minLength: 1, maxLength: 100 }) company: string;
+  @ApiProperty({ type: String, minLength: 1, maxLength: 120 }) role: string;
+}
 class ProjectRunVerificationFailureDto {
   @ApiProperty({ type: String, minLength: 1, maxLength: 128 }) code: string;
   @ApiProperty({ type: String, maxLength: 1000, nullable: true }) note: string | null;
@@ -43,6 +47,7 @@ class ProjectRunFocusGapDto {
   @ApiProperty({ type: String, minLength: 1, maxLength: 2000 }) description: string;
 }
 class ProjectRunRepositoryBindingDto {
+  @ApiProperty({ type: String, pattern: '^[1-9]\\d{0,19}$' }) githubRepositoryId: string;
   @ApiProperty({ type: String, maxLength: 255, nullable: true }) repositoryName: string | null;
   @ApiProperty({ type: 'integer', minimum: 1, nullable: true }) pullNumber: number | null;
   @ApiProperty({ type: String, pattern: '^[0-9a-f]{40}$', nullable: true }) headSha: string | null;
@@ -113,6 +118,8 @@ class ProjectRunProofFactsDto {
   @ApiProperty({ pattern: '^[0-9a-f]{40}$' }) headSha: string;
   @ApiProperty({ format: 'date-time' }) observedAt: string;
   @ApiProperty({ required: false, type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', nullable: true }) taskKey?: string | null;
+  @ApiProperty({ required: false, type: [String], maxItems: 40, items: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' } }) taskKeys?: string[];
+  @ApiProperty({ required: false, type: [String], maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' } }) citationIds?: string[];
   @ApiProperty({ required: false, type: String, maxLength: 500, nullable: true }) pullUrl?: string | null;
   @ApiProperty({ type: [ProjectRunProofEvaluationDto], maxItems: 20 }) evaluations: ProjectRunProofEvaluationDto[];
 }
@@ -128,9 +135,11 @@ export class ProjectRunProjectionDto {
   @ApiProperty({ type: String, format: 'uuid' }) id: string;
   @ApiProperty({ type: String, enum: ['READY', 'ACTIVE', 'BLOCKED', 'COMPLETED', 'ARCHIVED'] }) state: string;
   @ApiProperty({ type: 'integer', minimum: 1 }) version: number;
-  @ApiProperty({ required: false, type: Object }) target?: { company: string; role: string };
+  @ApiProperty({ required: false, type: String, format: 'date-time' }) updatedAt?: string;
+  @ApiProperty({ required: false, type: ProjectRunTargetDto }) target?: ProjectRunTargetDto;
   @ApiProperty({ type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', nullable: true }) currentTaskId: string | null;
   @ApiProperty({ type: String, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', nullable: true }) recommendedTaskId: string | null;
+  @ApiProperty({ required: false, type: [String], maxItems: 40, items: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' } }) eligibleReadyTaskIds?: string[];
   @ApiProperty({ type: ProjectRunPlanDto }) plan: ProjectRunPlanDto;
   @ApiProperty({ required: false, type: [ProjectRunMilestoneDto], maxItems: 8 }) milestones?: ProjectRunMilestoneDto[];
   @ApiProperty({ type: ProjectRunMapDto }) map: ProjectRunMapDto;
@@ -142,6 +151,14 @@ export class ProjectRunProjectionDto {
   @ApiProperty({ type: ProjectRunProofDto, nullable: true }) proof: ProjectRunProofDto | null;
 }
 
+class ProjectRunListResponseDto {
+  @ApiProperty({ type: [ProjectRunProjectionDto], maxItems: 50 })
+  items: ProjectRunProjectionDto[];
+
+  @ApiProperty({ type: String, nullable: true })
+  nextCursor: string | null;
+}
+
 @ApiTags('project runs')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -150,6 +167,14 @@ export class ProjectRunsController {
   constructor(private readonly runs: ProjectRunsService) {}
 
   @Get()
+  @ApiQuery({ name: 'state', required: false, enum: ProjectRunState })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    schema: { type: 'integer', minimum: 1, maximum: 50 },
+  })
+  @ApiQuery({ name: 'cursor', required: false, type: String })
+  @ApiOkResponse({ type: ProjectRunListResponseDto })
   listProjectRuns(
     @CurrentUser() user: AuthUser,
     @Query('state') state?: ProjectRunState,
@@ -173,6 +198,19 @@ export class ProjectRunsController {
   @Post(':id/tasks/:taskId/block') block(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('taskId') taskId: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string, @Body() body: Record<string, unknown>) { return this.command(user.id, id, taskId, 'block', version, key, body); }
   @Post(':id/tasks/:taskId/resume') resume(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('taskId') taskId: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) { return this.command(user.id, id, taskId, 'resume', version, key); }
   @Post(':id/tasks/:taskId/verify') @HttpCode(202) @Header('Retry-After', WORKFLOW_RETRY_AFTER_SECONDS) verify(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('taskId') taskId: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) { return this.command(user.id, id, taskId, 'verify', version, key); }
+  @Post(':id/tasks/:taskId/ai-help')
+  @HttpCode(HttpStatus.OK)
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiParam({ name: 'taskId', type: String })
+  @ApiOkResponse({ type: ProjectRunAiHelpResponseDto })
+  aiHelp(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('taskId') taskId: string,
+    @Body() body: ProjectRunAiHelpRequestDto,
+  ) {
+    return this.runs.aiHelp(user.id, id, taskId, body?.question);
+  }
 
   @Post(':id/archive')
   archive(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Headers('if-match') version: string, @Headers('idempotency-key') key: string) {

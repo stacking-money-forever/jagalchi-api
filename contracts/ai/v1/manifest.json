@@ -4,11 +4,14 @@
     "jobPostingExtract": "/ai/internal/v1/job-posting-extract",
     "candidateEvidenceInterpret": "/ai/internal/v1/candidate-evidence-interpret",
     "projectProposals": "/ai/internal/v1/project-proposals",
-    "projectPlan": "/ai/internal/v1/project-plan"
+    "projectPlan": "/ai/internal/v1/project-plan",
+    "focusTaskHelp": "/internal/v1/focus-task-help"
   },
   "files": {
     "candidate-evidence-interpret.request.schema.json": "d4db79c9a8a8b8838692c1a20fc2c4c586aea8865daa40847bac8095b6625698",
     "candidate-evidence-interpret.response.schema.json": "697105d980144964e5bdd0792692cd0f45b98c3ec0968b564d61abd7ed5cfd35",
+    "focus-task-help.request.schema.json": "b0b8b014cd90c1869431b41a9cf8eb2ba214ca2bd8bfdfc8f95cb867737bfd17",
+    "focus-task-help.response.schema.json": "560e9ab385c1bb2f7847f92d415534083c60e9f8f8197fe934f3df12ff46e64a",
     "job-posting-extract.request.schema.json": "a8cbb5bf6eb79339b4f55e76b1d32fdf9fdf5baaf1cbedcdfd10c37a3490c2fe",
     "job-posting-extract.response.schema.json": "f61dd3481f1d6cb5d7920e1ca623fb41dac53c4c9d054ed9e8c832d728f9989d",
     "project-plan.request.schema.json": "2389ff63e265fd6cc654fcd09e2fbe384933f94e511e97f4a4b6870036550d6c",
@@ -16,5 +19,5 @@
     "project-proposals.request.schema.json": "baade43971ca42251eea7dcde3dd3c02393634b3eda3b91904cd0cf0630944b4",
     "project-proposals.response.schema.json": "ab96692c05b6db4ed93bcb495f5430f3662a77e0de2187fde7323223df58da0f"
   },
-  "bundleSha256": "6bddb16fcd89851d8ed7a084f870f0e1e68a1a057319271e04aafe149d83bb39"
+  "bundleSha256": "865f513a448a21c58417df9d37cbb59202c2e7295555f56eab237cba3cedda7a"
 }

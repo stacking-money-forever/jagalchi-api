@@ -3,6 +3,8 @@ import { generateAiSchemas } from './generate-ai-schemas';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { isProjectRunProjection } from '../project-runs/project-run.projection';
+import { AI_V1_SCHEMAS } from './ai-v1.schemas';
+import { validateJsonSchema } from './json-schema-validator';
 
 type JsonSchema = Record<string, unknown>;
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -37,6 +39,55 @@ function acceptsOpenApi(document: JsonSchema, rawSchema: JsonSchema, value: unkn
   if (schema.type === 'boolean' && typeof value !== 'boolean') return false;
   return true;
 }
+function projectPlanResponse(options: { taskCount?: number; milestoneCount?: number; prerequisiteCount?: number } = {}): Record<string, unknown> {
+  const taskCount = Math.max(options.taskCount ?? 1, (options.prerequisiteCount ?? 0) + 1);
+  const milestoneCount = options.milestoneCount ?? 1;
+  const prerequisiteCount = options.prerequisiteCount ?? 0;
+  const tasks = Array.from({ length: taskCount }, (_, index) => ({
+    id: `task-${index + 1}`,
+    title: `Task ${index + 1}`,
+    milestoneId: 'milestone-1',
+    prerequisiteIds: index === prerequisiteCount && prerequisiteCount > 0
+      ? Array.from({ length: prerequisiteCount }, (__ , prerequisiteIndex) => `task-${prerequisiteIndex + 1}`)
+      : [],
+    purpose: 'Deliver the bounded outcome',
+    acceptanceCriteria: ['Pass the contract check'],
+    evidenceRules: ['test:contract'],
+    citationIds: ['source-1'],
+    gapIds: [],
+    required: true,
+  }));
+  return {
+    schemaVersion: 1,
+    operationId: '00000000-0000-4000-8000-000000000001',
+    kind: 'project_plan',
+    result: {
+      artifact: {
+        id: 'plan-1',
+        schemaVersion: 1,
+        title: 'Bounded plan',
+        target: 'project_run',
+        projectBlueprintId: 'blueprint-1',
+        projectBlueprintVersion: 1,
+        milestones: Array.from({ length: milestoneCount }, (_, index) => ({ id: `milestone-${index + 1}`, title: `Milestone ${index + 1}` })),
+        tasks,
+        firstAction: 'task-1',
+      },
+    },
+    citations: [],
+    receipt: {
+      provider: 'fixture',
+      model: 'fixture-v1',
+      providerRequestId: 'request-1',
+      promptVersion: 'v1',
+      inputHash: 'a'.repeat(64),
+      generatedAt: '2026-09-03T10:00:00Z',
+      durationMs: 1,
+      timeoutBudgetSeconds: 5,
+    },
+  };
+}
+
 
 describe('generated service contracts', () => {
   it('keeps checked-in AI v1 JSON schemas fresh', async () => {
@@ -65,6 +116,14 @@ describe('generated service contracts', () => {
     expect(artifact.properties.tasks.items.properties.required.type).toBe('boolean');
     expect(proposals.properties.result.properties.proposals.items.properties.rejectionReasons.minItems).toBe(1);
   });
+  it('accepts exact plan bounds and rejects one over', () => {
+    const schema = AI_V1_SCHEMAS['project-plan.response.schema.json'] as Record<string, unknown>;
+    expect(validateJsonSchema(schema, projectPlanResponse({ taskCount: 40, milestoneCount: 8, prerequisiteCount: 3 })).valid).toBe(true);
+    expect(validateJsonSchema(schema, projectPlanResponse({ taskCount: 41, milestoneCount: 8, prerequisiteCount: 3 })).valid).toBe(false);
+    expect(validateJsonSchema(schema, projectPlanResponse({ taskCount: 40, milestoneCount: 9, prerequisiteCount: 3 })).valid).toBe(false);
+    expect(validateJsonSchema(schema, projectPlanResponse({ taskCount: 5, milestoneCount: 8, prerequisiteCount: 4 })).valid).toBe(false);
+  });
+
 
   it('uses the compiled Nest generator for production OpenAPI freshness', async () => {
     const manifest = JSON.parse(await readFile(resolve(process.cwd(), 'package.json'), 'utf8'));
@@ -87,7 +146,31 @@ describe('generated service contracts', () => {
     expect(document.components.schemas.ProjectRunProofDto.additionalProperties ?? false).toBe(false);
     expect(document.components.schemas.ProjectRunProofDto.properties.validUntil.format).toBe('date-time');
     expect(schema.properties.tasks.maxItems).toBe(40);
+    expect(schema.properties.eligibleReadyTaskIds.maxItems).toBe(40);
+    const repositoryBinding = document.components.schemas.ProjectRunRepositoryBindingDto;
+    expect(repositoryBinding.required).toContain('githubRepositoryId');
+    expect(repositoryBinding.properties.githubRepositoryId.pattern).toBe('^[1-9]\\d{0,19}$');
     expect(document.paths['/api/project-runs/{id}'].get.parameters[0].schema.format).toBe('uuid');
+    const listProjectRuns = document.paths['/api/project-runs'].get;
+    expect(listProjectRuns.parameters.map((parameter: { name: string }) => parameter.name)).toEqual([
+      'state',
+      'limit',
+      'cursor',
+    ]);
+    expect(listProjectRuns.parameters.every((parameter: { required?: boolean }) => parameter.required !== true)).toBe(true);
+    expect(listProjectRuns.parameters.find((parameter: { name: string }) => parameter.name === 'limit').schema.type).toBe('integer');
+    expect(listProjectRuns.responses['200'].content['application/json'].schema.$ref).toBe(
+      '#/components/schemas/ProjectRunListResponseDto',
+    );
+    expect(document.components.schemas.ProjectRunListResponseDto.required).toEqual([
+      'items',
+      'nextCursor',
+    ]);
+    expect(document.components.schemas.ProjectRunProjectionDto.properties.updatedAt.format).toBe('date-time');
+    expect(document.components.schemas.ProjectRunProjectionDto.properties.target.$ref).toBe(
+      '#/components/schemas/ProjectRunTargetDto',
+    );
+    expect(document.paths['/api/project-runs/{id}/tasks/{taskId}/ai-help'].post).toBeDefined();
     expect(document.paths['/api/users'].post.requestBody.content['application/json'].schema.$ref).toContain('RegisterDto');
     expect(document.paths['/api/ai/jobs'].post.requestBody.content['application/json'].schema.$ref).toContain('RunAiJobDto');
     expect(document.paths['/api/v1/operations/project-plan'].post.requestBody).toBeDefined();
@@ -110,7 +193,7 @@ describe('generated service contracts', () => {
     const schema = ((document.components as JsonSchema).schemas as Record<string, JsonSchema>).ProjectRunProjectionDto!;
     const valid = {
       id: '00000000-0000-4000-8000-000000000001', state: 'READY', version: 1,
-      currentTaskId: 'task-1', recommendedTaskId: 'task-1', plan: { id: 'plan-1', schemaVersion: 1 },
+      currentTaskId: 'task-1', recommendedTaskId: 'task-1', eligibleReadyTaskIds: ['task-1'], repositoryBinding: { githubRepositoryId: '9000001', repositoryName: null, pullNumber: null, headSha: null, pullUrl: null }, plan: { id: 'plan-1', schemaVersion: 1 },
       map: { nodes: [{ id: 'task-1', title: 'Ship', milestoneId: 'milestone-1', state: 'READY' }], edges: [] },
       tasks: [{ id: 'task-1', title: 'Ship', state: 'READY', required: true, milestoneId: 'milestone-1', prerequisiteIds: [], purpose: '', acceptanceCriteria: ['Pass'], evidenceRequirements: ['PR'] }],
       proof: { summary: '', validUntil: '2026-09-03T10:00:00+09:00', publication: { state: 'ACTIVE', publicId: 'proof-1' }, verification: { state: 'PASS', verifiedAt: '2026-09-03T10:00:00Z' } },

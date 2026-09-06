@@ -101,6 +101,7 @@ export class PullRequestBindingHandler implements OnModuleInit {
         ...run.projection,
         version: run.version,
         repositoryBinding: {
+          githubRepositoryId: binding.githubRepositoryId!,
           repositoryName: binding.repositoryName,
           pullNumber: binding.pullNumber,
           headSha: binding.expectedHeadSha,

@@ -3,7 +3,7 @@ import { ProjectRunState } from './project-run.entity';
 import { isProjectRunProjection } from './project-run.projection';
 
 const projection = () => ({
-  id: '00000000-0000-4000-8000-000000000001', state: ProjectRunState.Ready, version: 1, currentTaskId: 'task-1', recommendedTaskId: 'task-1',
+  id: '00000000-0000-4000-8000-000000000001', state: ProjectRunState.Ready, version: 1, currentTaskId: 'task-1', recommendedTaskId: 'task-1', eligibleReadyTaskIds: ['task-1'],
   plan: { id: 'plan-v1', schemaVersion: 1 },
   map: { nodes: [{ id: 'task-1', title: 'Ship', milestoneId: 'milestone-1', state: 'READY' }], edges: [] },
   tasks: [{ id: 'task-1', title: 'Ship', state: 'READY', required: true, milestoneId: 'milestone-1', prerequisiteIds: [], purpose: 'Deliver', acceptanceCriteria: ['Pass'], evidenceRequirements: ['PR'] }],
@@ -69,7 +69,7 @@ describe('ProjectRun projection validation', () => {
       ...projection(),
       citations: [{ id: 'source-1', label: 'Requirement', quote: null }],
       gaps: [{ id: 'gap-1', description: 'typescript' }],
-      repositoryBinding: { repositoryName: 'fixture/verification-repository', pullNumber: 17, headSha: 'a'.repeat(40), pullUrl: 'https://github.com/fixture/verification-repository/pull/17' },
+      repositoryBinding: { githubRepositoryId: '9000001', repositoryName: 'fixture/verification-repository', pullNumber: 17, headSha: 'a'.repeat(40), pullUrl: 'https://github.com/fixture/verification-repository/pull/17' },
       tasks: [{ ...projection().tasks[0]!, citationIds: ['source-1'], gapIds: ['gap-1'] }],
       proof: {
         summary: 'Proof', validUntil: null,
@@ -78,11 +78,33 @@ describe('ProjectRun projection validation', () => {
         facts: {
           snapshotId: '00000000-0000-4000-8000-000000000099', verificationLevel: 'MACHINE_VERIFIED', provider: 'fixture',
           repositoryId: '9000001', repositoryName: 'fixture/verification-repository', pullNumber: 17, headSha: 'a'.repeat(40), observedAt: '2026-09-03T10:00:00Z',
-          taskKey: 'task-1', pullUrl: 'https://github.com/fixture/verification-repository/pull/17',
+          taskKey: 'task-1', citationIds: ['source-1'], pullUrl: 'https://github.com/fixture/verification-repository/pull/17',
           evaluations: [{ ruleId: 'rule-0', type: 'MERGED_PR', passed: true, code: 'PASS' }],
         },
       },
     };
     expect(isProjectRunProjection(value)).toBe(true);
+  });
+  it('accepts a pre-bind repository binding with null pull request facts', () => {
+    expect(isProjectRunProjection({
+      ...projection(),
+      repositoryBinding: { githubRepositoryId: '9000001', repositoryName: null, pullNumber: null, headSha: null, pullUrl: null },
+    })).toBe(true);
+  });
+  it('rejects repository bindings without the immutable GitHub repository ID', () => {
+    expect(isProjectRunProjection({
+      ...projection(),
+      repositoryBinding: { repositoryName: null, pullNumber: null, headSha: null, pullUrl: null },
+    })).toBe(false);
+  });
+
+  it('requires the recommended task to be the first eligible READY task', () => {
+    const value = projection();
+    value.eligibleReadyTaskIds = [];
+    expect(isProjectRunProjection(value)).toBe(false);
+    value.eligibleReadyTaskIds = ['task-1', 'task-1'];
+    expect(isProjectRunProjection(value)).toBe(false);
+    value.eligibleReadyTaskIds = ['missing'];
+    expect(isProjectRunProjection(value)).toBe(false);
   });
 });

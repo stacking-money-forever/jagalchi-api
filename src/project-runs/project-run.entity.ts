@@ -5,6 +5,7 @@ export enum ProjectRunState {
 }
 
 export interface ProjectRunRepositoryBinding {
+  githubRepositoryId: string;
   repositoryName: string | null;
   pullNumber: number | null;
   headSha: string | null;
@@ -23,6 +24,11 @@ export interface ProjectRunAiReceipt {
   promptVersion: string;
   inputHash: string;
   generatedAt: string;
+}
+
+export interface ProjectRunAiHelpResponse {
+  guidance: string;
+  provenance: ProjectRunAiReceipt;
 }
 
 export interface ProjectRunPlanProvenance {
@@ -44,10 +50,12 @@ export interface ProjectRunProjection {
   id: string;
   state: ProjectRunState;
   version: number;
+  updatedAt?: string;
   target?: { company: string; role: string };
   currentTaskId: string | null;
   recommendedTaskId: string | null;
   plan: { id: string; schemaVersion: number; provenance?: ProjectRunPlanProvenance };
+  eligibleReadyTaskIds?: string[];
   milestones?: ProjectRunMilestone[];
   map: {
     nodes: Array<{ id: string; title: string; milestoneId: string | null; state: ProjectTaskState }>;
@@ -73,6 +81,8 @@ export interface ProjectRunProjection {
       snapshotId: string; verificationLevel: 'MACHINE_VERIFIED' | 'INDEPENDENTLY_REVIEWED'; provider: 'fixture' | 'github';
       repositoryId: string; repositoryName?: string; pullNumber: number; headSha: string; observedAt: string;
       taskKey?: string | null;
+      taskKeys?: string[];
+      citationIds?: string[];
       pullUrl?: string | null;
       evaluations: Array<{ ruleId: string; type: 'MERGED_PR' | 'BASE_BRANCH' | 'CHANGED_PATH' | 'NAMED_CHECK'; passed: boolean; code: string }>;
     };

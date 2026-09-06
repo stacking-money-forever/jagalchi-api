@@ -176,7 +176,7 @@ export class AiJobsService {
           'x-request-id': idempotencyKey,
         },
         ...(usesJsonBody ? { body: JSON.stringify(safePayload) } : {}),
-        signal: AbortSignal.timeout(this.config.get<number>('AI_TIMEOUT_MS', 45_000)),
+        signal: AbortSignal.timeout(Number(this.config.get<string>('AI_TIMEOUT_MS', '45000'))),
       });
 
       if (!response.ok) {

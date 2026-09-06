@@ -1395,23 +1395,32 @@
         "parameters": [
           {
             "name": "state",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
+              "enum": [
+                "READY",
+                "ACTIVE",
+                "BLOCKED",
+                "COMPLETED",
+                "ARCHIVED"
+              ],
               "type": "string"
             }
           },
           {
             "name": "limit",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
             }
           },
           {
             "name": "cursor",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
               "type": "string"
@@ -1420,7 +1429,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRunListResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1717,6 +1733,60 @@
         "responses": {
           "202": {
             "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "project runs"
+        ]
+      }
+    },
+    "/api/project-runs/{id}/tasks/{taskId}/ai-help": {
+      "post": {
+        "operationId": "ProjectRunsController_aiHelp",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectRunAiHelpRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRunAiHelpResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4281,6 +4351,26 @@
         "properties": {},
         "additionalProperties": false
       },
+      "ProjectRunTargetDto": {
+        "type": "object",
+        "properties": {
+          "company": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "company",
+          "role"
+        ],
+        "additionalProperties": false
+      },
       "ProjectRunPlanReceiptDto": {
         "type": "object",
         "properties": {
@@ -4655,6 +4745,10 @@
       "ProjectRunRepositoryBindingDto": {
         "type": "object",
         "properties": {
+          "githubRepositoryId": {
+            "type": "string",
+            "pattern": "^[1-9]\\d{0,19}$"
+          },
           "repositoryName": {
             "type": "string",
             "maxLength": 255,
@@ -4677,6 +4771,7 @@
           }
         },
         "required": [
+          "githubRepositoryId",
           "repositoryName",
           "pullNumber",
           "headSha",
@@ -4873,6 +4968,26 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
             "nullable": true
           },
+          "taskKeys": {
+            "maxItems": 40,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "type": "array"
+          },
+          "citationIds": {
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "type": "array"
+          },
           "pullUrl": {
             "type": "string",
             "maxLength": 500,
@@ -4956,8 +5071,12 @@
             "type": "integer",
             "minimum": 1
           },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "target": {
-            "type": "object"
+            "$ref": "#/components/schemas/ProjectRunTargetDto"
           },
           "currentTaskId": {
             "type": "string",
@@ -4972,6 +5091,16 @@
             "maxLength": 128,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
             "nullable": true
+          },
+          "eligibleReadyTaskIds": {
+            "maxItems": 40,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "type": "array"
           },
           "plan": {
             "$ref": "#/components/schemas/ProjectRunPlanDto"
@@ -5033,6 +5162,88 @@
           "map",
           "tasks",
           "proof"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectRunProjectionDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunAiHelpRequestDto": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProjectRunAiHelpProvenanceDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "promptVersion": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "inputHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "promptVersion",
+          "inputHash",
+          "generatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "ProjectRunAiHelpResponseDto": {
+        "type": "object",
+        "properties": {
+          "guidance": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProjectRunAiHelpProvenanceDto"
+          }
+        },
+        "required": [
+          "guidance",
+          "provenance"
         ],
         "additionalProperties": false
       },

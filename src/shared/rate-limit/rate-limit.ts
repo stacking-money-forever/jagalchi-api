@@ -6,6 +6,8 @@ import type { ThrottlerModuleOptions } from '@nestjs/throttler';
 
 export const RATE_LIMIT_POLICY = 'jagalchi:rate-limit-policy';
 const DEFAULT_COMPLETION_IP_LIMIT = 10;
+const DEFAULT_ANONYMOUS_LIMIT = 60;
+const DEFAULT_SIGNED_USER_LIMIT = 120;
 export type RateLimitPolicy = 'entry' | 'request' | 'completion';
 export const RateLimited = (policy: RateLimitPolicy): MethodDecorator =>
   SetMetadata(RATE_LIMIT_POLICY, policy);
@@ -81,6 +83,18 @@ export const createRateLimitOptions = (
         config.get<string>('E2E_COMPLETION_IP_LIMIT') ??
           String(DEFAULT_COMPLETION_IP_LIMIT),
       );
+  const anonymousLimit = production
+    ? DEFAULT_ANONYMOUS_LIMIT
+    : Number(
+        config.get<string>('E2E_DEFAULT_ANONYMOUS_LIMIT') ??
+          String(DEFAULT_ANONYMOUS_LIMIT),
+      );
+  const signedUserLimit = production
+    ? DEFAULT_SIGNED_USER_LIMIT
+    : Number(
+        config.get<string>('E2E_DEFAULT_SIGNED_USER_LIMIT') ??
+          String(DEFAULT_SIGNED_USER_LIMIT),
+      );
   const hashSecret = config.getOrThrow<string>('RATE_LIMIT_HASH_SECRET');
   const identityFor = (context: ExecutionContext) =>
     resolveIdentity(requestFrom(context), jwt, hashSecret);
@@ -106,9 +120,10 @@ export const createRateLimitOptions = (
       {
         name: 'default',
         ttl: 60_000,
-        limit: async (context) => ((await identityFor(context)).user ? 120 : 60),
+        limit: async (context) =>
+          (await identityFor(context)).user ? signedUserLimit : anonymousLimit,
       },
-      { name: 'ip', ttl: 60_000, limit: 60 },
+      { name: 'ip', ttl: 60_000, limit: anonymousLimit },
       { name: 'entryIp', ttl: 60_000, limit: 5, skipIf: applies('entry') },
       { name: 'entryAccount', ttl: 3_600_000, limit: 20, skipIf: applies('entry') },
       { name: 'requestIp', ttl: 3_600_000, limit: 10, skipIf: applies('request') },

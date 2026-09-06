@@ -33,7 +33,12 @@ describe('ProjectRunsService', () => {
     for (const method of ['where', 'andWhere', 'orderBy', 'addOrderBy', 'take'] as const) builder[method].mockReturnValue(builder);
     const service = new ProjectRunsService({ createQueryBuilder: vi.fn(() => builder) } as never);
     const page = await service.list('owner-1', undefined, 1);
+    expect(builder.where).toHaveBeenCalledWith('run.owner_id = :ownerId', {
+      ownerId: 'owner-1',
+    });
+    expect(builder.take).toHaveBeenCalledWith(2);
     expect(page.items).toHaveLength(1); expect(page.nextCursor).toEqual(expect.any(String));
+    expect(page.items[0]?.updatedAt).toBe('2026-09-02T00:00:00.000Z');
     expect(JSON.parse(Buffer.from(page.nextCursor!, 'base64url').toString())).toEqual({ updatedAt: '2026-09-02T00:00:00.000Z', id: rows[0]!.id });
   });
 
@@ -88,11 +93,11 @@ describe('ProjectRunsService', () => {
   });
 
   it.each([
-    ['start', {}, 'IN_PROGRESS', ProjectRunState.Active, { currentTaskId: 'task-1' }],
-    ['defer', { required: false }, 'DEFERRED', ProjectRunState.Completed, { recommendedTaskId: null }],
-    ['block', {}, 'BLOCKED', ProjectRunState.Blocked, { currentTaskId: null }],
-    ['resume', { state: 'DEFERRED', required: false }, 'READY', ProjectRunState.Completed, { recommendedTaskId: 'task-1' }],
-    ['verify', { state: 'IN_PROGRESS' }, 'VERIFYING', ProjectRunState.Active, { currentTaskId: 'task-1' }],
+    ['start', {}, 'IN_PROGRESS', ProjectRunState.Active, { currentTaskId: 'task-1', eligibleReadyTaskIds: [] }],
+    ['defer', { required: false }, 'DEFERRED', ProjectRunState.Completed, { recommendedTaskId: null, eligibleReadyTaskIds: [] }],
+    ['block', {}, 'BLOCKED', ProjectRunState.Blocked, { currentTaskId: null, eligibleReadyTaskIds: [] }],
+    ['resume', { state: 'DEFERRED', required: false }, 'READY', ProjectRunState.Completed, { recommendedTaskId: 'task-1', eligibleReadyTaskIds: ['task-1'] }],
+    ['verify', { state: 'IN_PROGRESS' }, 'VERIFYING', ProjectRunState.Active, { currentTaskId: 'task-1', eligibleReadyTaskIds: [] }],
   ] as const)('projects %s from distinct locked/list rows', async (command, taskOverrides, expectedTaskState, expectedRunState, responseShape) => {
     const subject = transitionSubject(taskOverrides, command === 'verify' ? { state: ProjectRunState.Active, currentTaskId: 'task-1' } : {});
     if (command === 'verify') {
@@ -163,7 +168,7 @@ describe('ProjectRunsService', () => {
     expect(snapshots.save).not.toHaveBeenCalled();
   });
 
-  it('enqueues fixture reverification when the latest snapshot remains publishable', async () => {
+  it('advances fixture invalidation before enqueuing reverification', async () => {
     const runId = '00000000-0000-4000-8000-000000000001';
     const projection = { id: runId, state: ProjectRunState.Completed, version: 4, currentTaskId: null, recommendedTaskId: null, plan: { id: 'plan-1', schemaVersion: 1 }, map: { nodes: [], edges: [] }, tasks: [], proof: { summary: 'Verified', validUntil: null, publication: { state: 'ACTIVE', publicId: 'AAAAAAAAAAAAAAAAAAAAAAAAAAA' }, verification: { state: 'PASS', verifiedAt: '2026-09-03T00:00:00.000Z' }, facts: { snapshotId: 'snapshot-1', verificationLevel: 'MACHINE_VERIFIED', headSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } } };
     const run = { id: runId, ownerId: 'owner-1', state: ProjectRunState.Completed, version: 4, projection };
@@ -175,14 +180,20 @@ describe('ProjectRunsService', () => {
     const tasks = { exists: vi.fn().mockResolvedValue(false) };
     const qb = { where: vi.fn(), andWhere: vi.fn(), getExists: vi.fn().mockResolvedValue(false) };
     for (const method of ['where', 'andWhere'] as const) qb[method].mockReturnValue(qb);
-    const operations = { create: vi.fn((value) => ({ id: '00000000-0000-4000-8000-000000000077', version: 1, ...value })), save: vi.fn(async (value) => value), createQueryBuilder: vi.fn(() => qb) };
+    const order: string[] = [];
+    const operations = { create: vi.fn((value) => value), save: vi.fn(async (value) => { order.push('operation'); return value; }), createQueryBuilder: vi.fn(() => qb) };
     const manager = { getRepository: (entity: { name: string }) => entity === ProjectRun ? runs : entity === ProjectRunCommand ? commands : entity === ProofProfile ? profiles : entity === ProofSnapshot ? snapshots : entity === WorkflowOperation ? operations : entity === ProjectFeatureEntitlement ? entitlements : entity === ProjectTask ? tasks : null };
     const dataSource = { transaction: vi.fn((callback) => callback(manager)) };
     const config = { get: vi.fn((name: string) => name === 'GITHUB_PROVIDER' ? 'fixture' : name === 'PROJECT_RUNS_ENABLED' ? 'true' : undefined) };
-    const invalidation = { assertSnapshotPublishable: vi.fn().mockResolvedValue({ id: 'snapshot-1' }) };
+    const invalidation = {
+      advanceFixtureAndInvalidate: vi.fn(async () => { order.push('invalidate'); return 2; }),
+      assertSnapshotPublishable: vi.fn().mockResolvedValue({ id: 'snapshot-1' }),
+    };
     const result = await new ProjectRunsService(runs as never, dataSource as never, config as never, invalidation as never).reverify('owner-1', runId, 4, key);
     expect(result).toMatchObject({ kind: 'PROOF_REVERIFICATION', state: WorkflowOperationState.Pending });
     expect(run.version).toBe(5);
+    expect(invalidation.advanceFixtureAndInvalidate).toHaveBeenCalledOnce();
+    expect(order).toEqual(['invalidate', 'operation']);
     expect(invalidation.assertSnapshotPublishable).not.toHaveBeenCalled();
   });
 
@@ -222,10 +233,12 @@ describe('ProjectRunsService', () => {
     const manager = { getRepository: (entity: { name: string }) => entity === ProjectRun ? runs : entity === ProjectRunCommand ? commands : entity === ProofProfile ? profiles : entity === ProofSnapshot ? snapshots : entity === WorkflowOperation ? operations : entity === ProjectFeatureEntitlement ? entitlements : entity === ProjectTask ? tasks : null };
     const dataSource = { transaction: vi.fn((callback) => callback(manager)) };
     const config = { get: vi.fn((name: string) => name === 'GITHUB_PROVIDER' ? 'fixture' : name === 'PROJECT_RUNS_ENABLED' ? 'true' : undefined) };
-    const service = new ProjectRunsService(runs as never, dataSource as never, config as never, { assertSnapshotPublishable: vi.fn().mockResolvedValue({ id: 'snapshot-1' }) } as never);
+    const invalidation = { advanceFixtureAndInvalidate: vi.fn().mockResolvedValue(0), assertSnapshotPublishable: vi.fn().mockResolvedValue({ id: 'snapshot-1' }) };
+    const service = new ProjectRunsService(runs as never, dataSource as never, config as never, invalidation as never);
     const result = await service.reverify('owner-1', runId, 5, key);
     expect(result).toMatchObject({ kind: 'PROOF_REVERIFICATION', state: WorkflowOperationState.Pending });
     expect(run.version).toBe(6);
+    expect(invalidation.advanceFixtureAndInvalidate).toHaveBeenCalledOnce();
   });
 
   it('enqueues pull request binding before the first task verification attempt', async () => {
@@ -268,6 +281,17 @@ describe('ProjectRunsService', () => {
     const config = { get: vi.fn((name: string) => name === 'GITHUB_PROVIDER' ? 'fixture' : name === 'PROJECT_RUNS_ENABLED' ? 'true' : undefined) };
     await expect(new ProjectRunsService(runs as never, dataSource as never, config as never).bindPullRequest('owner-1', runId, 2, key, { githubRepositoryId: '9000001', pullNumber: 17 }))
       .rejects.toMatchObject({ response: { code: 'PULL_REQUEST_BINDING_LOCKED' } });
+  });
+  it('includes the immutable repository ID before a pull request is bound', () => {
+    const service = new ProjectRunsService({} as never);
+    const privateService = service as unknown as { repositoryBindingView: (binding: { githubRepositoryId: string; repositoryName: string | null; pullNumber: number | null; expectedHeadSha: string | null }) => unknown };
+    const view = privateService.repositoryBindingView({
+      githubRepositoryId: '9000001',
+      repositoryName: null,
+      pullNumber: null,
+      expectedHeadSha: null,
+    });
+    expect(view).toEqual({ githubRepositoryId: '9000001', repositoryName: null, pullNumber: null, headSha: null, pullUrl: null });
   });
 
 });

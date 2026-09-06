@@ -15,8 +15,8 @@ const schemaNames = (directory) =>
 
 const producerNames = schemaNames(producerDir);
 const consumerNames = schemaNames(consumerDir);
-if (producerNames.length !== 8 || JSON.stringify(producerNames) !== JSON.stringify(consumerNames)) {
-  throw new Error('AI producer and consumer must contain the same eight JSON schemas');
+if (producerNames.length !== 10 || JSON.stringify(producerNames) !== JSON.stringify(consumerNames)) {
+  throw new Error('AI producer and consumer must contain the same ten JSON schemas');
 }
 
 for (const name of producerNames) {

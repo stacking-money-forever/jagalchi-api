@@ -37,6 +37,16 @@ const planTask = object({
   citationIds: array(stableId, 20, 1), gapIds: array(stableId, 20),
   required: { type: 'boolean' },
 }, ['id', 'title', 'milestoneId', 'prerequisiteIds', 'required', 'purpose', 'acceptanceCriteria', 'evidenceRules', 'citationIds', 'gapIds']);
+const focusTaskCitation = object({
+  id: stableId, label: string(300, { minLength: 1 }), quote: string(2000),
+});
+const focusTaskGap = object({
+  id: stableId, description: string(2000, { minLength: 1 }),
+});
+const focusTaskPrerequisite = object({
+  id: stableId, title: string(300, { minLength: 1 }),
+  state: { enum: ['LOCKED', 'READY', 'IN_PROGRESS', 'BLOCKED', 'DEFERRED', 'VERIFYING', 'DONE'] },
+});
 const envelope = (kind: string, result: Schema): Schema => object({ schemaVersion: version, operationId: operation, kind: { const: kind }, result, citations: array(citation, 100), receipt });
 const document = (title: string, schema: Schema): Schema => ({ $schema: 'https://json-schema.org/draft/2020-12/schema', $id: `https://jagalchi.dev/schemas/ai/v1/${title}.schema.json`, title: `Jagalchi AI v1 ${title}`, ...schema });
 
@@ -45,6 +55,7 @@ export const AI_V1_ENDPOINTS = {
   candidateEvidenceInterpret: '/ai/internal/v1/candidate-evidence-interpret',
   projectProposals: '/ai/internal/v1/project-proposals',
   projectPlan: '/ai/internal/v1/project-plan',
+  focusTaskHelp: '/internal/v1/focus-task-help',
 } as const;
 
 export const AI_V1_SCHEMAS = {
@@ -78,6 +89,18 @@ export const AI_V1_SCHEMAS = {
     tasks: array(planTask, 40, 1),
     firstAction: stableId,
   }) }))),
+  'focus-task-help.request.schema.json': document('focus-task-help.request', object({
+    schemaVersion: version, operationId: operation, project_run_id: operation, task_id: stableId,
+    title: string(300, { minLength: 1 }), purpose: string(2000, { minLength: 1 }),
+    question: string(2000, { minLength: 1 }),
+    citations: array(focusTaskCitation, 20), gaps: array(focusTaskGap, 20),
+    prerequisites: array(focusTaskPrerequisite, 3),
+    acceptance_criteria: array(string(1000, { minLength: 1 }), 20, 1),
+    evidence_requirements: array(string(1000, { minLength: 1 }), 20, 1),
+  }, ['schemaVersion', 'operationId', 'project_run_id', 'task_id', 'title', 'purpose', 'citations', 'gaps', 'prerequisites', 'acceptance_criteria', 'evidence_requirements'])),
+  'focus-task-help.response.schema.json': document('focus-task-help.response', envelope('focus_task_help', object({
+    guidance: string(4000, { minLength: 1 }),
+  }))),
 } as const;
 
 export function stableSchemaJson(value: unknown): string { return `${JSON.stringify(value, null, 2)}\n`; }

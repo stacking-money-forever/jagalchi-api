@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jagalchi.dev/schemas/ai/v1/focus-task-help.request.schema.json",
+  "title": "Jagalchi AI v1 focus-task-help.request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "operationId",
+    "project_run_id",
+    "task_id",
+    "title",
+    "purpose",
+    "citations",
+    "gaps",
+    "prerequisites",
+    "acceptance_criteria",
+    "evidence_requirements"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "operationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "project_run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "task_id": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 300,
+      "minLength": 1
+    },
+    "purpose": {
+      "type": "string",
+      "maxLength": 2000,
+      "minLength": 1
+    },
+    "question": {
+      "type": "string",
+      "maxLength": 2000,
+      "minLength": 1
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label",
+          "quote"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "maxItems": 20
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "description"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1
+          }
+        }
+      },
+      "maxItems": 20
+    },
+    "prerequisites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "state"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
+          },
+          "state": {
+            "enum": [
+              "LOCKED",
+              "READY",
+              "IN_PROGRESS",
+              "BLOCKED",
+              "DEFERRED",
+              "VERIFYING",
+              "DONE"
+            ]
+          }
+        }
+      },
+      "maxItems": 3
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 1000,
+        "minLength": 1
+      },
+      "maxItems": 20,
+      "minItems": 1
+    },
+    "evidence_requirements": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 1000,
+        "minLength": 1
+      },
+      "maxItems": 20,
+      "minItems": 1
+    }
+  }
+}

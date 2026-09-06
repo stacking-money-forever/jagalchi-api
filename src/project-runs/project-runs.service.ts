@@ -1,31 +1,36 @@
-import { ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { DataSource, IsNull, MoreThan, Not, Repository } from 'typeorm';
+import { AiTokenService } from '../ai/ai-token.service';
+import { assertAiServiceOk, normalizeAiReceipt } from '../ai/ai-service-response';
 import { WorkflowOperation, WorkflowOperationState } from '../workflow-operations/workflow-operation.entities';
 import { ProofProfile, ProofProfileState } from '../career/career.entities';
-import { ProjectRun, ProjectRunState, type ProjectRunProjection } from './project-run.entity';
+import { AI_V1_ENDPOINTS, AI_V1_SCHEMAS } from '../contracts/ai-v1.schemas';
+import { validateJsonSchema } from '../contracts/json-schema-validator';
+import { ProjectRun, ProjectRunState, type ProjectRunAiHelpResponse, type ProjectRunProjection } from './project-run.entity';
 import { assertProjectRunProjection } from './project-run.projection';
 import {
   CareerDiffSnapshot, CareerTargetVersion, ProjectFeature, ProjectFeatureEntitlement, ProjectPlanSnapshot, ProjectProposal, ProjectProposalSet,
   ProjectRepositoryBinding, ProjectRunCommand, ProjectTask, ProofPublication, ProofPublicationStatus, ProofSnapshot,
   ProofValidity, RepositoryInvalidationWatermark, VerificationLevel,
 } from './product-spine.entities';
-import { normalizeAiReceipt, normalizePlanMilestones } from '../ai/ai-service-response';
+import { normalizePlanMilestones } from '../ai/ai-service-response';
 import { buildFocusContext } from './project-run.focus-context';
 import { VerificationInvalidationService } from './verification-invalidation.service';
-
 export type TaskCommand = 'start' | 'defer' | 'block' | 'resume' | 'verify';
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object' ? `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value) ?? 'null';
 
 @Injectable()
 export class ProjectRunsService {
+  private readonly logger = new Logger(ProjectRunsService.name);
   constructor(
     @InjectRepository(ProjectRun) private readonly runs: Repository<ProjectRun>,
     private readonly dataSource?: DataSource,
     private readonly config?: ConfigService,
     private readonly invalidation?: VerificationInvalidationService,
+    @Optional() private readonly aiTokens?: AiTokenService,
   ) {}
 
   async list(ownerId: string, state?: ProjectRunState, limit = 20, cursor?: string) {
@@ -49,6 +54,134 @@ export class ProjectRunsService {
     if (!run) throw new NotFoundException('Project run is not available');
     return this.ownerProjection(run);
   }
+  async aiHelp(
+    ownerId: string,
+    runId: string,
+    taskId: string,
+    questionInput?: string,
+  ): Promise<ProjectRunAiHelpResponse> {
+    if (this.config?.get<string>('PROJECT_RUNS_ENABLED') === 'false') {
+      throw new ServiceUnavailableException({
+        code: 'PROJECT_RUNS_DISABLED',
+        message: 'Project Runs are unavailable',
+      });
+    }
+    if (this.config?.get<string>('AI_FEATURES_ENABLED') === 'false') {
+      throw new ServiceUnavailableException({
+        code: 'AI_FEATURES_DISABLED',
+        message: 'AI features are unavailable',
+      });
+    }
+
+    const projection = await this.get(ownerId, runId);
+    const task = projection.tasks.find((candidate) => candidate.id === taskId);
+    if (!task) throw new NotFoundException('Project task is not available');
+    if (
+      projection.currentTaskId !== taskId
+      || !['IN_PROGRESS', 'VERIFYING'].includes(task.state)
+    ) {
+      this.conflict(
+        'FOCUS_TASK_NOT_ACTIVE',
+        'AI help is only available for the active Focus task',
+        { currentTaskId: projection.currentTaskId },
+      );
+    }
+    if (
+      questionInput !== undefined
+      && (typeof questionInput !== 'string' || questionInput.length > 2_000)
+    ) {
+      throw new BadRequestException('AI help question is invalid');
+    }
+    const question = typeof questionInput === 'string' ? questionInput.trim() : undefined;
+
+    const citationsById = new Map((projection.citations ?? []).map((citation) => [citation.id, citation]));
+    const gapsById = new Map((projection.gaps ?? []).map((gap) => [gap.id, gap]));
+    const tasksById = new Map(projection.tasks.map((candidate) => [candidate.id, candidate]));
+    const citations = (task.citationIds ?? []).map((citationId) => {
+      const citation = citationsById.get(citationId);
+      if (!citation) throw new Error('Project Run citation reference is invalid');
+      return { id: citation.id, label: citation.label, quote: citation.quote ?? '' };
+    });
+    const gaps = (task.gapIds ?? []).map((gapId) => {
+      const gap = gapsById.get(gapId);
+      if (!gap) throw new Error('Project Run gap reference is invalid');
+      return { id: gap.id, description: gap.description };
+    });
+    const prerequisites = task.prerequisiteIds.map((prerequisiteId) => {
+      const prerequisite = tasksById.get(prerequisiteId);
+      if (!prerequisite) throw new Error('Project Run prerequisite reference is invalid');
+      return { id: prerequisite.id, title: prerequisite.title, state: prerequisite.state };
+    });
+    const operationId = randomUUID();
+    const input = {
+      schemaVersion: 1,
+      operationId,
+      project_run_id: runId,
+      task_id: taskId,
+      title: task.title,
+      purpose: task.purpose,
+      ...(question ? { question } : {}),
+      citations,
+      gaps,
+      prerequisites,
+      acceptance_criteria: task.acceptanceCriteria,
+      evidence_requirements: task.evidenceRequirements,
+    };
+
+    if (!this.config || !this.aiTokens) {
+      throw new BadGatewayException({
+        code: 'AI_HELP_FAILED',
+        message: 'Focus task help is unavailable',
+      });
+    }
+
+    try {
+      const response = await fetch(
+        new URL(
+          AI_V1_ENDPOINTS.focusTaskHelp,
+          this.config.getOrThrow<string>('AI_SERVICE_URL'),
+        ),
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${this.aiTokens.issueInternal(ownerId, 'FOCUS_TASK_HELP')}`,
+            'content-type': 'application/json',
+            'x-request-id': operationId,
+          },
+          body: JSON.stringify(input),
+          signal: AbortSignal.timeout(Number(this.config.get<string>('AI_TIMEOUT_MS', '45000'))),
+        },
+      );
+      await assertAiServiceOk(response);
+      const value = await response.json() as Record<string, unknown>;
+      const validation = validateJsonSchema(
+        AI_V1_SCHEMAS['focus-task-help.response.schema.json'] as Record<string, unknown>,
+        value,
+      );
+      if (!validation.valid || value.operationId !== operationId) {
+        throw new Error(`AI response violates the Focus task help contract at ${validation.path ?? '$.operationId'}`);
+      }
+      const result = value.result;
+      const guidance = result && typeof result === 'object' && !Array.isArray(result)
+        ? (result as Record<string, unknown>).guidance
+        : undefined;
+      const provenance = normalizeAiReceipt(value.receipt);
+      if (typeof guidance !== 'string' || !guidance.trim() || !provenance) {
+        throw new Error('AI response is missing Focus task help guidance or provenance');
+      }
+      return { guidance: guidance.trim(), provenance };
+    } catch (error) {
+      if (error instanceof BadGatewayException) throw error;
+      this.logger.error(
+        'Focus task help failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new BadGatewayException({
+        code: 'AI_HELP_FAILED',
+        message: 'Focus task help is unavailable',
+      });
+    }
+  }
 
   async taskCommand(args: { ownerId: string; runId: string; taskKey: string; command: TaskCommand; expectedVersion: number; idempotencyKey: string; body?: Record<string, unknown> }): Promise<Record<string, unknown>> {
     if (!this.dataSource) throw new Error('Project Run command persistence is unavailable');
@@ -70,7 +203,7 @@ export class ProjectRunsService {
       const tasks = manager.getRepository(ProjectTask);
       const task = await tasks.findOne({ where: { projectRunId: run.id, taskKey: args.taskKey }, lock: { mode: 'pessimistic_write' } });
       if (!task) throw new NotFoundException('Project task is not available');
-      const all = await tasks.find({ where: { projectRunId: run.id }, order: { createdAt: 'ASC' } });
+      const all = await tasks.find({ where: { projectRunId: run.id }, order: { createdAt: 'ASC', taskKey: 'ASC' } });
       this.apply(run, task, all, args.command, args.body ?? {});
       this.syncTaskIntoAll(task, all);
       task.version += 1; run.version += 1; this.deriveRunState(run, all); this.project(run, all);
@@ -142,6 +275,7 @@ export class ProjectRunsService {
       const latest = await manager.getRepository(ProofSnapshot).findOne({ where: { projectRunId: run.id }, order: { createdAt: 'DESC' } });
       if (!latest || latest.payload.status !== 'PASS') this.conflict('VERIFICATION_STALE', 'A current passing verification is required');
       if (await this.hasInFlightVerification(manager, ownerId, run.id)) this.conflict('VERIFICATION_IN_PROGRESS', 'A verification is already in progress for this Project Run');
+      await this.invalidation?.advanceFixtureAndInvalidate();
       run.version += 1; run.projection = { ...run.projection, version: run.version }; await manager.getRepository(ProjectRun).save(run);
       const now = new Date(); const operation = await manager.getRepository(WorkflowOperation).save(manager.getRepository(WorkflowOperation).create({ ownerId, route, idempotencyKey, kind: 'PROOF_REVERIFICATION', inputHash, input: { schemaVersion: 1, projectRunId: run.id, runVersion: run.version }, inputSchemaVersion: 1, resultSchemaVersion: 1, state: WorkflowOperationState.Pending, availableAt: now, nextAttemptAt: now, leaseOwner: null, leaseExpiresAt: null, heartbeatAt: null, attempts: 0, maxAttempts: 3, errorCode: null, errorMessage: null, failureClass: null, resultType: null, resultId: null, resultHref: null, completedAt: null }));
       const response = { id: operation.id, kind: operation.kind, state: operation.state, version: operation.version ?? 1, result: null, error: null };
@@ -285,8 +419,30 @@ export class ProjectRunsService {
   }
   private project(run: ProjectRun, tasks: ProjectTask[]): void {
     const states = new Map(tasks.map((task) => [task.taskKey, task.state]));
-    run.projection = { ...run.projection, state: run.state, version: run.version, currentTaskId: run.currentTaskId, recommendedTaskId: tasks.find((task) => task.state === 'READY')?.taskKey ?? null, tasks: run.projection.tasks.map((task) => ({ ...task, state: states.get(task.id) ?? task.state })), map: { ...run.projection.map, nodes: run.projection.map.nodes.map((node) => ({ ...node, state: states.get(node.id) ?? node.state })) } };
+    const readyTaskIds = this.readyTaskIds(tasks);
+    run.projection = {
+      ...run.projection,
+      state: run.state,
+      version: run.version,
+      currentTaskId: run.currentTaskId,
+      recommendedTaskId: readyTaskIds[0] ?? null,
+      eligibleReadyTaskIds: readyTaskIds,
+      tasks: run.projection.tasks.map((task) => ({
+        ...task,
+        state: states.get(task.id) ?? task.state,
+      })),
+      map: {
+        ...run.projection.map,
+        nodes: run.projection.map.nodes.map((node) => ({
+          ...node,
+          state: states.get(node.id) ?? node.state,
+        })),
+      },
+    };
     assertProjectRunProjection(run.projection);
+  }
+  private readyTaskIds(tasks: Array<Pick<ProjectTask, 'taskKey' | 'state'>>): string[] {
+    return tasks.filter((task) => task.state === 'READY').map((task) => task.taskKey);
   }
   private focus(run: ProjectRun, task: ProjectTask): void { if (run.currentTaskId && run.currentTaskId !== task.taskKey) this.conflict('FOCUS_TASK_ACTIVE', 'Another Focus task is active', { currentTaskId: run.currentTaskId }); }
   private async requireMutationEnabled(manager: { getRepository: DataSource['getRepository'] }, ownerId: string): Promise<void> {
@@ -318,8 +474,9 @@ export class ProjectRunsService {
   }
 
   private repositoryBindingView(binding: ProjectRepositoryBinding | null | undefined): ProjectRunProjection['repositoryBinding'] | undefined {
-    if (!binding || binding.pullNumber === null) return undefined;
+    if (!binding || !binding.githubRepositoryId) return undefined;
     return {
+      githubRepositoryId: binding.githubRepositoryId,
       repositoryName: binding.repositoryName,
       pullNumber: binding.pullNumber,
       headSha: binding.expectedHeadSha,
@@ -348,9 +505,10 @@ export class ProjectRunsService {
 
   private async ownerProjection(run: ProjectRun): Promise<ProjectRunProjection> {
     const legacy = this.validated(run);
-    if (!this.dataSource) return legacy;
+    const updatedAt = run.updatedAt instanceof Date ? run.updatedAt.toISOString() : legacy.updatedAt;
+    if (!this.dataSource) return { ...legacy, ...(updatedAt ? { updatedAt } : {}) };
     const [tasks, snapshot, publication, profile, binding, planSnapshot] = await Promise.all([
-      this.dataSource.getRepository(ProjectTask).find({ where: { projectRunId: run.id } }),
+      this.dataSource.getRepository(ProjectTask).find({ where: { projectRunId: run.id }, order: { createdAt: 'ASC', taskKey: 'ASC' } }),
       this.dataSource.getRepository(ProofSnapshot).findOne({ where: { projectRunId: run.id }, order: { createdAt: 'DESC' } }),
       this.dataSource.getRepository(ProofPublication).findOne({ where: { projectRunId: run.id, validity: Not(ProofValidity.Superseded) }, order: { updatedAt: 'DESC' } }),
       this.dataSource.getRepository(ProofProfile).findOne({ where: { ownerUserId: run.ownerId } }),
@@ -396,11 +554,20 @@ export class ProjectRunsService {
       const refs = focus.taskRefs[task.id];
       return {
         ...task,
+        ...(row ? { state: row.state } : {}),
         ...(task.citationIds === undefined && refs?.citationIds.length ? { citationIds: refs.citationIds } : {}),
         ...(task.gapIds === undefined && refs?.gapIds.length ? { gapIds: refs.gapIds } : {}),
         verificationFailure: row?.blockReasonCode ? { code: row.blockReasonCode, note: row.blockNote } : null,
       };
     });
+    const readyTaskIds = projectedTasks.filter((task) => task.state === 'READY').map((task) => task.id);
+    const projectedMap = {
+      ...legacy.map,
+      nodes: legacy.map.nodes.map((node) => ({
+        ...node,
+        state: taskRows.get(node.id)?.state ?? node.state,
+      })),
+    };
     const repositoryBinding = legacy.repositoryBinding ?? this.repositoryBindingView(binding);
     const pendingOperationRow = await this.dataSource.getRepository(WorkflowOperation).createQueryBuilder('op')
       .where('op.owner_id = :ownerId', { ownerId: run.ownerId })
@@ -413,7 +580,12 @@ export class ProjectRunsService {
     const supersededPublication = await this.dataSource.getRepository(ProofPublication).findOne({ where: { projectRunId: run.id, validity: ProofValidity.Superseded }, order: { updatedAt: 'DESC' } });
     const base = {
       ...legacy,
+      ...(updatedAt ? { updatedAt } : {}),
       plan,
+      currentTaskId: run.currentTaskId,
+      recommendedTaskId: readyTaskIds[0] ?? null,
+      eligibleReadyTaskIds: readyTaskIds,
+      map: projectedMap,
       ...(milestones.length ? { milestones } : {}),
       ...(legacy.citations === undefined && focus.citations.length ? { citations: focus.citations } : {}),
       ...(legacy.gaps === undefined && focus.gaps.length ? { gaps: focus.gaps } : {}),
@@ -431,6 +603,12 @@ export class ProjectRunsService {
     const watermark = provider && repositoryId ? await this.dataSource.getRepository(RepositoryInvalidationWatermark).findOne({ where: { provider, repositoryId } }) : null;
     const stale = publication?.validity === ProofValidity.Invalidated || (watermark?.generation ?? 0) !== snapshot.invalidationGeneration;
     const evaluations = Array.isArray(payload.evaluations) ? payload.evaluations.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item)).map((item) => ({ ruleId: String(item.ruleId), type: item.type as 'MERGED_PR' | 'BASE_BRANCH' | 'CHANGED_PATH' | 'NAMED_CHECK', passed: item.passed === true, code: String(item.code) })) : [];
+    const factTaskKeys = typeof payload.taskKey === 'string' && taskRows.has(payload.taskKey)
+      ? [payload.taskKey]
+      : projectedTasks
+        .filter((task) => evaluations.some((evaluation) => evaluation.ruleId === task.id || evaluation.ruleId.startsWith(`${task.id}:`)))
+        .map((task) => task.id);
+    const factCitationIds = [...new Set(factTaskKeys.flatMap((taskKey) => projectedTasks.find((task) => task.id === taskKey)?.citationIds ?? []))];
     const repositoryName = binding?.repositoryName ?? (typeof payload.repositoryName === 'string' ? payload.repositoryName : undefined);
     const pullNumber = Number.isInteger(payload.pullNumber) ? Number(payload.pullNumber) : binding?.pullNumber ?? null;
     const facts = provider && repositoryId && pullNumber && typeof payload.headSha === 'string' && typeof payload.observedAt === 'string'
@@ -443,7 +621,9 @@ export class ProjectRunsService {
         pullNumber,
         headSha: payload.headSha,
         observedAt: payload.observedAt,
-        ...(typeof payload.taskKey === 'string' ? { taskKey: payload.taskKey } : {}),
+        ...(factTaskKeys.length === 1 ? { taskKey: factTaskKeys[0] } : {}),
+        ...(factTaskKeys.length > 1 ? { taskKeys: factTaskKeys } : {}),
+        ...(factCitationIds.length ? { citationIds: factCitationIds } : {}),
         pullUrl: this.pullUrl(repositoryName ?? binding?.repositoryName, pullNumber),
         evaluations,
       }

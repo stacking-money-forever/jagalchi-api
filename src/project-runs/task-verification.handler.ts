@@ -32,7 +32,7 @@ export class TaskVerificationHandler implements OnModuleInit {
       const run = await manager.getRepository(ProjectRun).findOne({ where: { id: String(operation.input.projectRunId), ownerId: operation.ownerId }, lock: { mode: 'pessimistic_read' } });
       const binding = run ? await manager.getRepository(ProjectRepositoryBinding).findOne({ where: { projectRunId: run.id }, lock: { mode: 'pessimistic_read' } }) : null;
       if (!run || run.state !== ProjectRunState.Completed || run.version !== operation.input.runVersion || !binding?.installationId || !binding.githubRepositoryId || !binding.pullNumber || !binding.expectedHeadSha) throw Object.assign(new Error('Reverification fence is stale'), { code: 'VERIFICATION_STALE' });
-      const tasks = await manager.getRepository(ProjectTask).find({ where: { projectRunId: run.id }, order: { createdAt: 'ASC' } });
+      const tasks = await manager.getRepository(ProjectTask).find({ where: { projectRunId: run.id }, order: { createdAt: 'ASC', taskKey: 'ASC' } });
       return { run, binding, rules: tasks.flatMap((task) => this.rules(task.evidenceRequirements).map((rule) => ({ ...rule, id: `${task.taskKey}:${rule.id}` }))) };
     });
     let proof: MachineProofResult;
@@ -137,10 +137,43 @@ export class TaskVerificationHandler implements OnModuleInit {
     const task = await manager.getRepository(ProjectTask).findOneOrFail({ where: { id: fence.task.id, projectRunId: run.id }, lock: { mode: 'pessimistic_write' } });
     const binding = await manager.getRepository(ProjectRepositoryBinding).findOneOrFail({ where: { projectRunId: run.id }, lock: { mode: 'pessimistic_read' } });
     if (this.config.get<string>('PROJECT_RUNS_ENABLED') !== 'true' || !entitled || run.state === ProjectRunState.Archived || run.version !== fence.run.version || task.version !== fence.task.version || task.state !== 'VERIFYING' || binding.bindingVersion !== fence.binding.bindingVersion || binding.expectedHeadSha !== fence.binding.expectedHeadSha || binding.pullNumber !== fence.binding.pullNumber) throw Object.assign(new Error('Verification fence is stale'), { code: 'VERIFICATION_STALE' });
-    const tasks = await manager.getRepository(ProjectTask).find({ where: { projectRunId: run.id }, order: { createdAt: 'ASC' } }); return { operation: current, run, task, binding, tasks };
+    const tasks = await manager.getRepository(ProjectTask).find({ where: { projectRunId: run.id }, order: { createdAt: 'ASC', taskKey: 'ASC' } }); return { operation: current, run, task, binding, tasks };
   }
   private async finalizeOperation(manager: EntityManager, operation: WorkflowOperation, value: Record<string, unknown>) { const resource = value.resource as { resourceType: string; resourceId: string; resourceHref: string }; await manager.getRepository(WorkflowOperationResult).save(manager.getRepository(WorkflowOperationResult).create({ operationId: operation.id, value })); operation.state = WorkflowOperationState.Succeeded; operation.version = (operation.version ?? 1) + 1; operation.completedAt = new Date(); operation.leaseOwner = null; operation.leaseExpiresAt = null; operation.resultType = resource.resourceType; operation.resultId = resource.resourceId; operation.resultHref = resource.resourceHref; operation.failureClass = null; operation.errorCode = null; operation.errorMessage = null; await manager.getRepository(WorkflowOperation).save(operation); }
   private assertLease(operation: WorkflowOperation | null, leaseOwner: string | null): asserts operation is WorkflowOperation { if (!operation || operation.state !== WorkflowOperationState.Running || !leaseOwner || operation.leaseOwner !== leaseOwner || !operation.leaseExpiresAt || operation.leaseExpiresAt <= new Date()) throw Object.assign(new Error('Verification lease lost'), { code: 'VERIFICATION_STALE' }); }
   private rules(values: string[]): TaskEvidenceRule[] { const rules: TaskEvidenceRule[] = []; values.forEach((value, index) => { if (value === 'PR') rules.push({ id: `rule-${index}`, type: 'MERGED_PR' }); else if (value.startsWith('CHANGED_PATH:')) rules.push({ id: `rule-${index}`, type: 'CHANGED_PATH', glob: value.slice(13) }); else if (value.startsWith('NAMED_CHECK:')) rules.push({ id: `rule-${index}`, type: 'NAMED_CHECK', context: value.slice(12) }); else if (value.startsWith('BASE_BRANCH:')) rules.push({ id: `rule-${index}`, type: 'BASE_BRANCH', branch: value.slice(12) }); }); return rules; }
-  private derive(run: ProjectRun, tasks: ProjectTask[]) { const required = tasks.filter((task) => task.required); run.state = required.every((task) => task.state === 'DONE') ? ProjectRunState.Completed : tasks.some((task) => ['IN_PROGRESS', 'VERIFYING'].includes(task.state)) ? ProjectRunState.Active : tasks.some((task) => task.state === 'READY') ? ProjectRunState.Active : ProjectRunState.Blocked; run.version += 1; const states = new Map(tasks.map((task) => [task.taskKey, task.state])); run.projection = { ...run.projection, state: run.state, version: run.version, currentTaskId: run.currentTaskId, recommendedTaskId: tasks.find((task) => task.state === 'READY')?.taskKey ?? null, tasks: run.projection.tasks.map((item) => ({ ...item, state: states.get(item.id) ?? item.state })), map: { ...run.projection.map, nodes: run.projection.map.nodes.map((item) => ({ ...item, state: states.get(item.id) ?? item.state })) } }; }
+  private derive(run: ProjectRun, tasks: ProjectTask[]) {
+    const required = tasks.filter((task) => task.required);
+    run.state = required.every((task) => task.state === 'DONE')
+      ? ProjectRunState.Completed
+      : tasks.some((task) => ['IN_PROGRESS', 'VERIFYING'].includes(task.state))
+        ? ProjectRunState.Active
+        : tasks.some((task) => task.state === 'READY')
+          ? ProjectRunState.Active
+          : ProjectRunState.Blocked;
+    run.version += 1;
+    const states = new Map(tasks.map((task) => [task.taskKey, task.state]));
+    const eligibleReadyTaskIds = tasks
+      .filter((task) => task.state === 'READY')
+      .map((task) => task.taskKey);
+    run.projection = {
+      ...run.projection,
+      state: run.state,
+      version: run.version,
+      currentTaskId: run.currentTaskId,
+      recommendedTaskId: eligibleReadyTaskIds[0] ?? null,
+      eligibleReadyTaskIds,
+      tasks: run.projection.tasks.map((item) => ({
+        ...item,
+        state: states.get(item.id) ?? item.state,
+      })),
+      map: {
+        ...run.projection.map,
+        nodes: run.projection.map.nodes.map((node) => ({
+          ...node,
+          state: states.get(node.id) ?? node.state,
+        })),
+      },
+    };
+  }
 }

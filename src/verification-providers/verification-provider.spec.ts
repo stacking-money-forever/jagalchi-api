@@ -107,6 +107,17 @@ describe('FixtureVerificationProvider', () => {
     ]);
   });
 
+  it('provides a dedicated failed PR in the default success scenario', async () => {
+    const subject = new FixtureVerificationProvider('success');
+    const facts = await subject.getPullRequestFacts({
+      ...pullRequestSelector,
+      pullNumber: FIXTURE_VERIFICATION_IDS.failurePullNumber,
+    });
+    const proof = subject.evaluate(facts, rules, fence());
+    expect(facts.pullNumber).toBe(FIXTURE_VERIFICATION_IDS.failurePullNumber);
+    expect(proof.status).toBe('FAIL');
+  });
+
   it('emits deterministic invalidations and fences stale head facts after drift', async () => {
     const subject = new FixtureVerificationProvider('drift');
     const original = await subject.getPullRequestFacts(pullRequestSelector);

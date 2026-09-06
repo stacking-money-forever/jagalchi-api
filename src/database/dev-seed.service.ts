@@ -354,7 +354,7 @@ export class DevSeedService {
         installationId: this.uuid(`github-installation:${ownerId}`),
         githubRepositoryId: '9000001',
         repositoryName: 'fixture/verification-repository', repositoryPrivate: true,
-        bindingVersion: 1, pullNumber: 17, expectedHeadSha: 'a'.repeat(40),
+        bindingVersion: 1, pullNumber: 42, expectedHeadSha: 'a'.repeat(40),
       } : { mode: RepositoryMode.ManualGreenfield },
     });
     if (this.projectRuns && this.proofMissions) {
