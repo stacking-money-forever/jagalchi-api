@@ -13,6 +13,16 @@ const projection = () => ({
 describe('ProjectRun projection validation', () => {
   it('accepts the closed Map/Focus projection', () => expect(isProjectRunProjection(projection())).toBe(true));
   it('accepts the richer owner target summary without opening unknown fields', () => expect(isProjectRunProjection({ ...projection(), target: { company: 'Example', role: 'Engineer' } })).toBe(true));
+  it('accepts a base64url public id that begins with a URL-safe symbol', () => {
+    const value = projection();
+    value.proof = {
+      summary: 'Proof',
+      validUntil: null,
+      publication: { state: 'ACTIVE', publicId: '-Dk0E_76ChZhOcTDFBv7hnUPBt0' },
+      verification: { state: 'PASS', verifiedAt: '2026-09-03T00:00:00.000Z' },
+    };
+    expect(isProjectRunProjection(value)).toBe(true);
+  });
   it('rejects dangling focus task IDs', () => expect(isProjectRunProjection({ ...projection(), currentTaskId: 'missing' })).toBe(false));
   it('rejects unknown nested fields', () => {
     const value = projection();

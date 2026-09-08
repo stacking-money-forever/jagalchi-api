@@ -17,6 +17,9 @@ const exact = (value: Record<string, unknown>, keys: string[]): boolean => {
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const id = (value: unknown): value is string => typeof value === 'string' && ID.test(value);
 const nullableId = (value: unknown): boolean => value === null || id(value);
+const nullablePublicId = (value: unknown): boolean =>
+  value === null ||
+  (typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value));
 const strings = (value: unknown, max: number): value is string[] => Array.isArray(value) && value.length <= max && value.every((item) => typeof item === 'string' && item.length > 0 && item.length <= 1000);
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const iso = (value: unknown): boolean => typeof value === 'string' && RFC3339.test(value) && !Number.isNaN(Date.parse(value));
@@ -134,7 +137,7 @@ export function isProjectRunProjection(value: unknown): value is ProjectRunProje
   if (!record(publication) || !record(verification)) return false;
   const publicationKeys = Object.keys(publication);
   const publicationShape = publicationKeys.length === 2 ? ['state', 'publicId'] : publicationKeys.length === 3 && publicationKeys.includes('supersededSnapshotId') ? ['publicId', 'state', 'supersededSnapshotId'] : null;
-  const baseValid = record(publication) && publicationShape && publicationKeys.sort().join() === [...publicationShape].sort().join() && ['ACTIVE', 'UNPUBLISHED', 'INVALIDATED'].includes(String(publication.state)) && nullableId(publication.publicId) && (!('supersededSnapshotId' in publication) || publication.supersededSnapshotId === null || (typeof publication.supersededSnapshotId === 'string' && UUID.test(publication.supersededSnapshotId)))
+  const baseValid = record(publication) && publicationShape && publicationKeys.sort().join() === [...publicationShape].sort().join() && ['ACTIVE', 'UNPUBLISHED', 'INVALIDATED'].includes(String(publication.state)) && nullablePublicId(publication.publicId) && (!('supersededSnapshotId' in publication) || publication.supersededSnapshotId === null || (typeof publication.supersededSnapshotId === 'string' && UUID.test(publication.supersededSnapshotId)))
     && record(verification) && exact(verification, ['state', 'verifiedAt']) && ['PENDING', 'PASS', 'FAIL', 'STALE'].includes(String(verification.state)) && (verification.verifiedAt === null || iso(verification.verifiedAt));
   if (!baseValid) return false;
   if (proof.failedCriteria !== undefined) {
