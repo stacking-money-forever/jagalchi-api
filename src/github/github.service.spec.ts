@@ -133,6 +133,75 @@ describe('GithubService installation and repository authorization', () => {
     expect(subject.claimAttempts.save).toHaveBeenCalledWith(expect.objectContaining({ consumedAt: expect.any(Date) }));
   });
 
+  it('revokes an older active installation when the owner claims a replacement App installation', async () => {
+    const subject = createSubject();
+    let replacementInstallation: typeof installation | undefined;
+    const previousInstallation = {
+      ...installation,
+      id: '10000000-0000-4000-8000-000000000099',
+      githubInstallationId: '400',
+    };
+    const previousMember = {
+      ...member,
+      installationId: previousInstallation.id,
+    };
+    subject.mission.installationId = previousInstallation.id;
+    subject.claimAttempts.findOne.mockResolvedValue(validAttempt());
+    subject.oauth.findOne.mockResolvedValue({
+      userId: 'owner-a',
+      provider: OAuthProvider.Github,
+      providerUserId: '07001',
+    });
+    subject.client.getInstallation.mockResolvedValue({
+      installationId: '501',
+      accountId: '7001',
+      accountType: 'USER',
+    });
+    subject.client.listInstallationRepositories.mockResolvedValue([
+      { repositoryId: '101', fullName: member.fullName, private: true },
+    ]);
+    subject.installations.findOne.mockResolvedValue(null);
+    subject.installations.save.mockImplementation(async (value: unknown) => {
+      const saved = { id: installation.id, ...(value as object) } as typeof installation;
+      if ((value as { githubInstallationId?: string }).githubInstallationId === '501') {
+        replacementInstallation = saved;
+      }
+      return saved;
+    });
+    subject.installations.find.mockImplementation(async () => [
+      previousInstallation,
+      replacementInstallation!,
+    ]);
+    subject.repositories.find
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([previousMember]);
+
+    await subject.service.claimInstallation('owner-a', rawState, '501');
+
+    expect(previousInstallation).toMatchObject({
+      status: GithubInstallationStatus.Revoked,
+      revokedAt: expect.any(Date),
+    });
+    expect(replacementInstallation).toMatchObject({
+      id: installation.id,
+      status: GithubInstallationStatus.Active,
+      revokedAt: null,
+    });
+    expect(previousMember).toMatchObject({
+      active: false,
+      removedAt: expect.any(Date),
+    });
+    expect(subject.mission).toMatchObject({
+      state: ProofMissionState.Bound,
+      currentVerificationRunId: null,
+      currentReviewId: null,
+    });
+    expect(subject.publications.update).toHaveBeenCalledWith(
+      { missionId: 'mission-a', state: PublishedProofState.Active },
+      { state: PublishedProofState.Invalidated },
+    );
+  });
+
   it.each([
     ['replayed', validAttempt({ consumedAt: new Date('2026-08-25T00:00:00.000Z') })],
     ['wrong owner', validAttempt({ userId: 'owner-b' })],
@@ -330,6 +399,14 @@ describe('GithubService installation and repository authorization', () => {
     unclaimed.installations.findOne.mockResolvedValue(null);
     await expect(unclaimed.service.reconcileInstallation('501')).resolves.toBeUndefined();
     expect(unclaimed.client.getInstallation).not.toHaveBeenCalled();
+
+    const replaced = createSubject();
+    replaced.installations.findOne.mockResolvedValue({
+      ...installation,
+      status: GithubInstallationStatus.Revoked,
+    });
+    await expect(replaced.service.reconcileInstallation('501')).resolves.toBeUndefined();
+    expect(replaced.client.getInstallation).not.toHaveBeenCalled();
 
     const mismatch = createSubject();
     mismatch.installations.findOne.mockResolvedValue(installation);

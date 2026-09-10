@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'node:crypto';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { OAuthIdentity, OAuthProvider } from '../auth/auth.entities';
 import {
   ProofMission,
@@ -145,6 +145,7 @@ export class GithubService {
       }
       installation = await manager.getRepository(GithubInstallation).save(installation);
       await this.replaceRepositoryMembership(manager, installation.id, providerRepositories);
+      await this.revokeOtherOwnerInstallations(manager, ownerUserId, installation.id);
       attempt.consumedAt = new Date();
       await manager.getRepository(GithubInstallationClaimAttempt).save(attempt);
 
@@ -187,6 +188,7 @@ export class GithubService {
       where: { githubInstallationId: canonicalInstallationId },
     });
     if (!claimed) return;
+    if (claimed.status === GithubInstallationStatus.Revoked) return;
 
     const providerInstallation = await this.client.getInstallation(canonicalInstallationId);
     if (
@@ -378,6 +380,54 @@ export class GithubService {
     if (existing.length > 0) await repository.save(existing);
     for (const repositoryId of removedRepositoryIds.sort()) {
       await this.invalidateRepositoryCredit(manager, installationId, repositoryId);
+    }
+  }
+
+  private async revokeOtherOwnerInstallations(
+    manager: EntityManager,
+    ownerUserId: string,
+    activeInstallationId: string,
+  ): Promise<void> {
+    const installationRepository = manager.getRepository(GithubInstallation);
+    const repositoryMemberships = manager.getRepository(GithubInstallationRepository);
+    const previousInstallations = await installationRepository.find({
+      where: {
+        ownerUserId,
+        status: In([
+          GithubInstallationStatus.Active,
+          GithubInstallationStatus.Suspended,
+        ]),
+      },
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    const now = new Date();
+
+    for (const previous of previousInstallations) {
+      if (previous.id === activeInstallationId) continue;
+
+      const activeMemberships = await repositoryMemberships.find({
+        where: { installationId: previous.id, active: true },
+        order: { githubRepositoryId: 'ASC' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      for (const membership of activeMemberships) {
+        membership.active = false;
+        membership.removedAt = now;
+      }
+      if (activeMemberships.length > 0) await repositoryMemberships.save(activeMemberships);
+      for (const membership of activeMemberships) {
+        await this.invalidateRepositoryCredit(
+          manager,
+          previous.id,
+          membership.githubRepositoryId,
+        );
+      }
+
+      previous.status = GithubInstallationStatus.Revoked;
+      previous.suspendedAt = null;
+      previous.revokedAt = now;
+      await installationRepository.save(previous);
     }
   }
 
