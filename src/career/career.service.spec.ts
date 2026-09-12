@@ -118,6 +118,7 @@ const facts = {
   pullNumber: 7,
   headSha: sha,
   merged: true,
+  mergedAt: '2026-08-25T00:00:00Z',
   baseBranch: 'main',
   changedPaths: ['src/proof.ts', 'tests/proof.spec.ts'],
   checks: [{ name: 'ci/test', successful: true }],

@@ -194,11 +194,19 @@ export class GithubClient {
         : Promise.resolve([]),
     ]);
 
+    const merged = asBoolean(pull.merged);
+    const mergedAt = pull.merged_at == null ? null : asString(pull.merged_at);
+    if (merged && (!mergedAt || Number.isNaN(Date.parse(mergedAt)))) {
+      throw new GithubProviderError('INVALID_RESPONSE');
+    }
+    if (!merged && mergedAt !== null) throw new GithubProviderError('INVALID_RESPONSE');
+
     return {
       repositoryId: providerRepositoryId,
       pullNumber: providerPullNumber,
       headSha,
-      merged: asBoolean(pull.merged),
+      merged,
+      mergedAt,
       baseBranch: asString(base.ref),
       changedPaths,
       checks,

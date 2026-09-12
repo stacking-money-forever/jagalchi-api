@@ -75,4 +75,47 @@ describe('TaskVerificationHandler fixture integration', () => {
     vi.spyOn(handler as never, 'readFence').mockRejectedValue(error); handler.onModuleInit();
     await expect(registry.get('TASK_VERIFICATION')!(operation, new AbortController().signal)).rejects.toBe(error);
   });
+
+  it('uses live GitHub facts for production task verification', async () => {
+    const registry = new WorkflowOperationHandlers();
+    const github = {
+      resolvePullRequestBinding: vi.fn().mockResolvedValue({
+        repositoryName: 'fixture/verification-repository',
+        repositoryPrivate: true,
+      }),
+      getPullRequestFacts: vi.fn().mockResolvedValue({
+        repositoryId: FIXTURE_VERIFICATION_IDS.repositoryId,
+        pullNumber: FIXTURE_VERIFICATION_IDS.pullNumber,
+        headSha: FIXTURE_VERIFICATION_IDS.initialHeadSha,
+        merged: true,
+        mergedAt: '2026-09-03T00:00:00.000Z',
+        baseBranch: 'main',
+        changedPaths: ['src/core.ts'],
+        checks: [{ name: 'ci/test', successful: true }],
+        statuses: [],
+      }),
+    };
+    const subject = new TaskVerificationHandler(
+      {} as never,
+      { get: (key: string) => key === 'GITHUB_PROVIDER' ? 'github' : 'true' } as never,
+      registry,
+      new FixtureVerificationProvider(),
+      github as never,
+    );
+    vi.spyOn(subject as never, 'readFence').mockResolvedValue({
+      ...fence,
+      binding: { ...fence.binding, installationId: 'installation-1' },
+    } as never);
+    const success = vi.spyOn(subject as never, 'commitResult').mockResolvedValue({ status: 'PASS' } as never);
+    subject.onModuleInit();
+
+    await expect(registry.get('TASK_VERIFICATION')!(operation, new AbortController().signal))
+      .resolves.toEqual({ status: 'PASS' });
+    expect(github.getPullRequestFacts).toHaveBeenCalledTimes(2);
+    expect(success).toHaveBeenCalledWith(
+      operation,
+      expect.anything(),
+      expect.objectContaining({ provider: 'github', status: 'PASS' }),
+    );
+  });
 });

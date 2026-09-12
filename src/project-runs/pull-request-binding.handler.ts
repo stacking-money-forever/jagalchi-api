@@ -1,4 +1,4 @@
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource, EntityManager, IsNull, MoreThan } from 'typeorm';
 import { FIXTURE_VERIFICATION_IDS, FixtureVerificationProvider } from '../verification-providers';
@@ -6,6 +6,8 @@ import { VerificationProviderError } from '../verification-providers/verificatio
 import { WorkflowOperation, WorkflowOperationResult, WorkflowOperationState } from '../workflow-operations/workflow-operation.entities';
 import { WorkflowOperationHandlers } from '../workflow-operations/workflow-operation.worker';
 import { RetryableWorkflowError } from '../workflow-operations/workflow-runtime';
+import { GithubProviderError } from '../github/github.client';
+import { GithubAuthorizationError, GithubService } from '../github/github.service';
 import { ProjectRun, ProjectRunState } from './project-run.entity';
 import { assertProjectRunProjection } from './project-run.projection';
 import { ProjectFeature, ProjectFeatureEntitlement, ProjectRepositoryBinding, ProjectTask } from './product-spine.entities';
@@ -18,10 +20,11 @@ export class PullRequestBindingHandler implements OnModuleInit {
     private readonly config: ConfigService,
     private readonly handlers: WorkflowOperationHandlers,
     @Inject(VERIFICATION_PROVIDER) private readonly provider: FixtureVerificationProvider,
+    @Optional() private readonly github?: GithubService,
   ) {}
 
   onModuleInit(): void {
-    if (this.config.get<string>('PROJECT_RUNS_ENABLED') === 'true' && this.config.get<string>('GITHUB_PROVIDER') === 'fixture') {
+    if (this.config.get<string>('PROJECT_RUNS_ENABLED') === 'true' && ['fixture', 'github'].includes(this.config.get<string>('GITHUB_PROVIDER') ?? '')) {
       this.handlers.register('PULL_REQUEST_BINDING', (operation) => this.execute(operation));
     }
   }
@@ -29,6 +32,35 @@ export class PullRequestBindingHandler implements OnModuleInit {
   private async execute(operation: WorkflowOperation) {
     const fence = await this.readFence(operation);
     try {
+      if (this.config.get<string>('GITHUB_PROVIDER') === 'github') {
+        if (!this.github || !fence.binding.installationId) {
+          throw new VerificationProviderError('VERIFICATION_PROVIDER_UNAVAILABLE');
+        }
+        const [binding, head] = await Promise.all([
+          this.github.resolvePullRequestBinding(
+            operation.ownerId,
+            fence.binding.installationId,
+            String(operation.input.githubRepositoryId),
+            Number(operation.input.pullNumber),
+          ),
+          this.github.getPullRequestHead(
+            operation.ownerId,
+            fence.binding.installationId,
+            String(operation.input.githubRepositoryId),
+            Number(operation.input.pullNumber),
+          ),
+        ]);
+        if (binding.repositoryName !== fence.binding.repositoryName && fence.binding.repositoryName) {
+          throw new VerificationProviderError('VERIFICATION_PROVIDER_DRIFTED');
+        }
+        return this.commitSuccess(
+          operation,
+          fence,
+          binding.repositoryName,
+          binding.repositoryPrivate,
+          head.headSha,
+        );
+      }
       const repository = await this.provider.resolveRepositoryBinding({
         ownerId: FIXTURE_VERIFICATION_IDS.ownerId,
         installationId: FIXTURE_VERIFICATION_IDS.installationId,
@@ -43,6 +75,19 @@ export class PullRequestBindingHandler implements OnModuleInit {
       }
       return this.commitSuccess(operation, fence, repository.fullName, repository.private, facts.headSha);
     } catch (error) {
+      if (error instanceof GithubProviderError) {
+        if (['RATE_LIMITED', 'TIMEOUT', 'UPSTREAM'].includes(error.code)) {
+          throw new RetryableWorkflowError('VERIFICATION_PROVIDER_UNAVAILABLE', error.message);
+        }
+        return this.commitFailure(
+          operation,
+          fence,
+          error.code === 'NOT_FOUND' ? 'PULL_REQUEST_NOT_FOUND' : 'VERIFICATION_FACTS_INVALID',
+        );
+      }
+      if (error instanceof GithubAuthorizationError) {
+        return this.commitFailure(operation, fence, 'REPOSITORY_NOT_AUTHORIZED');
+      }
       if (error instanceof VerificationProviderError && error.code === 'VERIFICATION_PROVIDER_UNAVAILABLE') {
         throw new RetryableWorkflowError(error.code, error.message);
       }
