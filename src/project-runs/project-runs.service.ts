@@ -192,7 +192,7 @@ export class ProjectRunsService {
       const prior = await commands.findOne({ where: { ownerId: args.ownerId, route, idempotencyKey: args.idempotencyKey } });
       if (prior) { if (prior.inputHash !== inputHash) this.conflict('IDEMPOTENCY_KEY_REUSED', 'Idempotency key was reused with different input'); return prior.response; }
       await this.requireMutationEnabled(manager, args.ownerId);
-      if (args.command === 'verify' && this.config && this.config.get<string>('GITHUB_PROVIDER') !== 'fixture') throw new ServiceUnavailableException({ code: 'VERIFICATION_PROVIDER_UNAVAILABLE', message: 'Task verification provider is unavailable' });
+      if (args.command === 'verify' && this.config && !['fixture', 'github'].includes(this.config.get<string>('GITHUB_PROVIDER') ?? '')) throw new ServiceUnavailableException({ code: 'VERIFICATION_PROVIDER_UNAVAILABLE', message: 'Task verification provider is unavailable' });
       const runs = manager.getRepository(ProjectRun);
       const run = await runs.findOne({ where: { id: args.runId, ownerId: args.ownerId }, lock: { mode: 'pessimistic_write' } });
       if (!run) throw new NotFoundException('Project run is not available');
@@ -259,7 +259,7 @@ export class ProjectRunsService {
 
   async reverify(ownerId: string, runId: string, expectedVersion: number, idempotencyKey: string): Promise<Record<string, unknown>> {
     if (!this.dataSource) throw new Error('Project Run command persistence is unavailable');
-    if (this.config?.get<string>('GITHUB_PROVIDER') !== 'fixture') throw new ServiceUnavailableException({ code: 'VERIFICATION_PROVIDER_UNAVAILABLE', message: 'Proof verification provider is unavailable' });
+    if (!['fixture', 'github'].includes(this.config?.get<string>('GITHUB_PROVIDER') ?? '')) throw new ServiceUnavailableException({ code: 'VERIFICATION_PROVIDER_UNAVAILABLE', message: 'Proof verification provider is unavailable' });
     const route = `/api/project-runs/${runId}/reverify`; const inputHash = createHash('sha256').update(canonical({ expectedVersion })).digest('hex');
     return this.dataSource.transaction(async (manager) => {
       const commands = manager.getRepository(ProjectRunCommand); const prior = await commands.findOne({ where: { ownerId, route, idempotencyKey } });
@@ -292,7 +292,7 @@ export class ProjectRunsService {
     body: { githubRepositoryId: string; pullNumber: number },
   ): Promise<Record<string, unknown>> {
     if (!this.dataSource) throw new Error('Project Run command persistence is unavailable');
-    if (this.config?.get<string>('GITHUB_PROVIDER') !== 'fixture') {
+    if (!['fixture', 'github'].includes(this.config?.get<string>('GITHUB_PROVIDER') ?? '')) {
       throw new ServiceUnavailableException({ code: 'VERIFICATION_PROVIDER_UNAVAILABLE', message: 'Pull request binding provider is unavailable' });
     }
     const route = `/api/project-runs/${runId}/pull-request`;

@@ -1,7 +1,9 @@
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource, EntityManager, IsNull, MoreThan } from 'typeorm';
-import { FIXTURE_VERIFICATION_IDS, FixtureVerificationProvider, type MachineProofResult, type TaskEvidenceRule, VerificationProviderError } from '../verification-providers';
+import { DeterministicTaskEvidenceEvaluator, FIXTURE_VERIFICATION_IDS, FixtureVerificationProvider, verificationFactsDigest, type MachineProofResult, type PullRequestFacts, type TaskEvidenceRule, VerificationProviderError } from '../verification-providers';
+import { GithubProviderError } from '../github/github.client';
+import { GithubAuthorizationError, GithubService } from '../github/github.service';
 import { WorkflowOperation, WorkflowOperationResult, WorkflowOperationState } from '../workflow-operations/workflow-operation.entities';
 import { WorkflowOperationHandlers } from '../workflow-operations/workflow-operation.worker';
 import { RetryableWorkflowError } from '../workflow-operations/workflow-runtime';
@@ -17,10 +19,11 @@ export class TaskVerificationHandler implements OnModuleInit {
     private readonly config: ConfigService,
     private readonly handlers: WorkflowOperationHandlers,
     @Inject(VERIFICATION_PROVIDER) private readonly provider: FixtureVerificationProvider,
+    @Optional() private readonly github?: GithubService,
   ) {}
 
   onModuleInit(): void {
-    if (this.config.get<string>('PROJECT_RUNS_ENABLED') === 'true' && this.config.get<string>('GITHUB_PROVIDER') === 'fixture') {
+    if (this.config.get<string>('PROJECT_RUNS_ENABLED') === 'true' && ['fixture', 'github'].includes(this.config.get<string>('GITHUB_PROVIDER') ?? '')) {
       this.handlers.register('TASK_VERIFICATION', (operation) => this.execute(operation));
       this.handlers.register('PROOF_REVERIFICATION', (operation) => this.executeReverification(operation));
     }
@@ -37,12 +40,10 @@ export class TaskVerificationHandler implements OnModuleInit {
     });
     let proof: MachineProofResult;
     try {
-      const repository = await this.provider.resolveRepositoryBinding({ ownerId: FIXTURE_VERIFICATION_IDS.ownerId, installationId: FIXTURE_VERIFICATION_IDS.installationId, repositoryId: fence.binding.githubRepositoryId! });
-      if (repository.fullName !== fence.binding.repositoryName || repository.private !== fence.binding.repositoryPrivate) throw new VerificationProviderError('VERIFICATION_PROVIDER_DRIFTED');
-      const facts = await this.provider.getPullRequestFacts({ repositoryId: fence.binding.githubRepositoryId!, pullNumber: fence.binding.pullNumber! });
-      proof = this.provider.evaluate(facts, fence.rules, { bindingVersion: fence.binding.bindingVersion, criteriaVersion: fence.run.version, expectedHeadSha: fence.binding.expectedHeadSha! });
-      const latest = await this.provider.getPullRequestFacts({ repositoryId: fence.binding.githubRepositoryId!, pullNumber: fence.binding.pullNumber! });
-      if (latest.headSha !== proof.headSha || latest.factsDigest !== facts.factsDigest) throw new VerificationProviderError('VERIFICATION_PROVIDER_DRIFTED');
+      const facts = await this.pullRequestFacts(operation, fence.binding);
+      proof = this.evaluate(facts, fence.rules, { bindingVersion: fence.binding.bindingVersion, criteriaVersion: fence.run.version, expectedHeadSha: fence.binding.expectedHeadSha! });
+      const latest = await this.pullRequestFacts(operation, fence.binding);
+      if (latest.headSha !== proof.headSha || this.stableFactsDigest(latest) !== this.stableFactsDigest(facts)) throw new VerificationProviderError('VERIFICATION_PROVIDER_DRIFTED');
       if (proof.status !== 'PASS') throw Object.assign(new Error('Machine proof criteria failed'), { code: 'VERIFICATION_FAILED' });
     } catch (error) {
       if (error instanceof VerificationProviderError && error.code === 'VERIFICATION_PROVIDER_UNAVAILABLE') throw new RetryableWorkflowError(error.code, error.message);
@@ -66,13 +67,11 @@ export class TaskVerificationHandler implements OnModuleInit {
     const fence = await this.readFence(operation);
     let proof: MachineProofResult;
     try {
-      const repositoryFacts = await this.provider.resolveRepositoryBinding({ ownerId: FIXTURE_VERIFICATION_IDS.ownerId, installationId: FIXTURE_VERIFICATION_IDS.installationId, repositoryId: fence.binding.githubRepositoryId! });
-      if (repositoryFacts.fullName !== fence.binding.repositoryName || repositoryFacts.private !== fence.binding.repositoryPrivate) throw new VerificationProviderError('VERIFICATION_PROVIDER_DRIFTED');
-      const facts = await this.provider.getPullRequestFacts({ repositoryId: fence.binding.githubRepositoryId!, pullNumber: fence.binding.pullNumber! });
-      proof = this.provider.evaluate(facts, fence.rules, { bindingVersion: fence.binding.bindingVersion, criteriaVersion: fence.task.version, expectedHeadSha: fence.binding.expectedHeadSha! });
-      if (this.provider.scenario === 'drift') this.provider.advanceDrift();
-      const latest = await this.provider.getPullRequestFacts({ repositoryId: fence.binding.githubRepositoryId!, pullNumber: fence.binding.pullNumber! });
-      if (latest.headSha !== proof.headSha || latest.factsDigest !== facts.factsDigest) throw new VerificationProviderError('VERIFICATION_PROVIDER_DRIFTED');
+      const facts = await this.pullRequestFacts(operation, fence.binding);
+      proof = this.evaluate(facts, fence.rules, { bindingVersion: fence.binding.bindingVersion, criteriaVersion: fence.task.version, expectedHeadSha: fence.binding.expectedHeadSha! });
+      if (this.config.get<string>('GITHUB_PROVIDER') === 'fixture' && this.provider.scenario === 'drift') this.provider.advanceDrift();
+      const latest = await this.pullRequestFacts(operation, fence.binding);
+      if (latest.headSha !== proof.headSha || this.stableFactsDigest(latest) !== this.stableFactsDigest(facts)) throw new VerificationProviderError('VERIFICATION_PROVIDER_DRIFTED');
     } catch (error) {
       if (error instanceof VerificationProviderError && error.code === 'VERIFICATION_PROVIDER_UNAVAILABLE') throw new RetryableWorkflowError(error.code, error.message);
       if (error instanceof VerificationProviderError) return this.commitFailure(operation, fence, error.code);
@@ -80,12 +79,116 @@ export class TaskVerificationHandler implements OnModuleInit {
     }
     const result = await this.commitResult(operation, fence, proof);
     if (
+      this.config.get<string>('GITHUB_PROVIDER') === 'fixture' &&
       proof.status === 'FAIL'
       && fence.binding.pullNumber === FIXTURE_VERIFICATION_IDS.failurePullNumber
     ) {
       this.provider.advanceFailureRecovery();
     }
     return result;
+  }
+
+  private evaluate(
+    facts: PullRequestFacts,
+    rules: readonly TaskEvidenceRule[],
+    fence: { bindingVersion: number; criteriaVersion: number; expectedHeadSha: string },
+  ): MachineProofResult {
+    return this.config.get<string>('GITHUB_PROVIDER') === 'github'
+      ? new DeterministicTaskEvidenceEvaluator().evaluate(facts, rules, fence)
+      : this.provider.evaluate(facts, rules, fence);
+  }
+
+  private stableFactsDigest(facts: PullRequestFacts): string {
+    const stableFacts: Partial<PullRequestFacts> = { ...facts };
+    delete stableFacts.observedAt;
+    delete stableFacts.factsDigest;
+    return verificationFactsDigest(stableFacts);
+  }
+
+  private async pullRequestFacts(
+    operation: WorkflowOperation,
+    binding: {
+      installationId?: string | null;
+      githubRepositoryId?: string | null;
+      repositoryName?: string | null;
+      repositoryPrivate?: boolean | null;
+      pullNumber?: number | null;
+    },
+  ): Promise<PullRequestFacts> {
+    if (this.config.get<string>('GITHUB_PROVIDER') !== 'github') {
+      const repository = await this.provider.resolveRepositoryBinding({
+        ownerId: FIXTURE_VERIFICATION_IDS.ownerId,
+        installationId: FIXTURE_VERIFICATION_IDS.installationId,
+        repositoryId: binding.githubRepositoryId!,
+      });
+      if (repository.fullName !== binding.repositoryName || repository.private !== binding.repositoryPrivate) {
+        throw new VerificationProviderError('VERIFICATION_PROVIDER_DRIFTED');
+      }
+      return this.provider.getPullRequestFacts({
+        repositoryId: binding.githubRepositoryId!,
+        pullNumber: binding.pullNumber!,
+      });
+    }
+    if (!this.github || !binding.installationId || !binding.githubRepositoryId || !binding.pullNumber) {
+      throw new VerificationProviderError('VERIFICATION_PROVIDER_UNAVAILABLE');
+    }
+    try {
+      const [repository, raw] = await Promise.all([
+        this.github.resolvePullRequestBinding(
+          operation.ownerId,
+          binding.installationId,
+          binding.githubRepositoryId,
+          binding.pullNumber,
+        ),
+        this.github.getPullRequestFacts(
+          operation.ownerId,
+          binding.installationId,
+          binding.githubRepositoryId,
+          binding.pullNumber,
+        ),
+      ]);
+      if (repository.repositoryName !== binding.repositoryName || repository.repositoryPrivate !== binding.repositoryPrivate) {
+        throw new VerificationProviderError('VERIFICATION_PROVIDER_DRIFTED');
+      }
+      const observedAt = new Date().toISOString();
+      const namedChecks = [...raw.checks.map((check) => ({
+        context: check.name,
+        conclusion: check.successful ? 'SUCCESS' as const : 'FAILURE' as const,
+        completedAt: null,
+      })), ...raw.statuses.map((status) => ({
+        context: status.context,
+        conclusion: status.successful ? 'SUCCESS' as const : 'FAILURE' as const,
+        completedAt: null,
+      }))];
+      const uniqueChecks = [...new Map(namedChecks.map((check) => [check.context, check])).values()]
+        .sort((left, right) => left.context.localeCompare(right.context));
+      const unsigned = {
+        schemaVersion: 1 as const,
+        provider: 'github' as const,
+        repositoryId: raw.repositoryId,
+        pullNumber: raw.pullNumber,
+        headSha: raw.headSha,
+        baseBranch: raw.baseBranch,
+        state: raw.merged ? 'MERGED' as const : 'OPEN' as const,
+        mergedAt: raw.mergedAt,
+        changedPaths: [...raw.changedPaths].sort(),
+        namedChecks: uniqueChecks,
+        observedAt,
+      };
+      return { ...unsigned, factsDigest: verificationFactsDigest(unsigned) };
+    } catch (error) {
+      if (error instanceof VerificationProviderError) throw error;
+      if (error instanceof GithubAuthorizationError) {
+        throw new VerificationProviderError('REPOSITORY_NOT_AUTHORIZED');
+      }
+      if (error instanceof GithubProviderError) {
+        if (['RATE_LIMITED', 'TIMEOUT', 'UPSTREAM'].includes(error.code)) {
+          throw new VerificationProviderError('VERIFICATION_PROVIDER_UNAVAILABLE');
+        }
+        if (error.code === 'NOT_FOUND') throw new VerificationProviderError('PULL_REQUEST_NOT_FOUND');
+      }
+      throw new VerificationProviderError('VERIFICATION_FACTS_INVALID');
+    }
   }
 
   private readFence(operation: WorkflowOperation) {

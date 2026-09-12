@@ -126,7 +126,7 @@ describe('GithubClient trust boundary', () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url.includes('/access_tokens')) return tokenResponse();
       if (/\/pulls\/7$/.test(url)) return json({
-        number: 7, merged: true, base: { ref: 'main', repo: { id: 101 } }, head: { sha: sha.toUpperCase() },
+        number: 7, merged: true, merged_at: '2026-08-25T00:00:00Z', base: { ref: 'main', repo: { id: 101 } }, head: { sha: sha.toUpperCase() },
       });
       if (url.includes('/files?')) return json([
         { filename: 'tests/proof.spec.ts' }, { filename: 'src/proof.ts' }, { filename: 'src/proof.ts' },
@@ -149,7 +149,7 @@ describe('GithubClient trust boundary', () => {
 
     const result = await new GithubClient(config() as never).getPullRequestFacts('501', repository, 7);
     expect(result).toEqual({
-      repositoryId: '101', pullNumber: 7, headSha: sha, merged: true, baseBranch: 'main',
+      repositoryId: '101', pullNumber: 7, headSha: sha, merged: true, mergedAt: '2026-08-25T00:00:00Z', baseBranch: 'main',
       changedPaths: ['src/proof.ts', 'tests/proof.spec.ts'],
       checks: [
         { name: 'ci/test', successful: true },

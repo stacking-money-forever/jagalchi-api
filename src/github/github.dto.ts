@@ -21,6 +21,7 @@ export interface PullRequestFacts {
   pullNumber: number;
   headSha: string;
   merged: boolean;
+  mergedAt: string | null;
   baseBranch: string;
   changedPaths: string[];
   checks: Array<{ name: string; successful: boolean }>;
