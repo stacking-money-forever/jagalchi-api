@@ -84,11 +84,10 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
   }
 
   private async profile(operation: WorkflowOperation, signal: AbortSignal) {
-    if (this.config.get<string>('GITHUB_PROVIDER') !== 'fixture') throw Object.assign(new Error('Real GitHub capture is not enabled in Phase 1'), { code: 'REPOSITORY_NOT_ELIGIBLE' });
     const installations = await this.installations.find({ where: { ownerUserId: operation.ownerId, status: GithubInstallationStatus.Active } });
     const allowed = new Set(Array.isArray(operation.input.repositoryIds) ? operation.input.repositoryIds as string[] : []);
     const facts = (await Promise.all(installations.map((installation) => this.repositories.find({ where: { installationId: installation.id, active: true } })))).flat().filter((repo) => allowed.size === 0 || allowed.has(repo.githubRepositoryId)).sort((left, right) => left.githubRepositoryId.localeCompare(right.githubRepositoryId));
-    if (!facts.length) throw Object.assign(new Error('No eligible fixture repository facts'), { code: 'REPOSITORY_NOT_ELIGIBLE' });
+    if (!facts.length) throw Object.assign(new Error('No eligible repository facts'), { code: 'REPOSITORY_NOT_ELIGIBLE' });
     const evidence = facts.map((repo, index) => ({ id: `repo-${index + 1}`, title: repo.fullName, url: `https://github.com/${repo.fullName}`, quote: `Repository ${repo.fullName} is available to the installation.` }));
     const ai = await this.ai(operation, signal, 'INTERPRET', AI_V1_ENDPOINTS.candidateEvidenceInterpret, 'candidate-evidence-interpret.response.schema.json', { objective: 'Interpret candidate evidence', evidence });
     const expectedFacts = facts.map(({ githubRepositoryId, fullName, private: isPrivate }) => ({ githubRepositoryId, fullName, private: isPrivate }));
@@ -332,4 +331,3 @@ export class CareerV1WorkflowHandlers implements OnModuleInit {
 
   private resource(type: string, id: string, href: string, extra: Record<string, unknown> = {}) { return { ...extra, resource: { resourceType: type, resourceId: id, resourceHref: href } }; }
 }
-

@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AiContractInvalidError } from '../workflow-operations/ai-workflow.handlers';
 import { CareerV1WorkflowHandlers } from './career-v1.handlers';
 import type { CandidateProfileSnapshot, CareerDiffSnapshot, CareerTargetVersion } from '../project-runs/product-spine.entities';
+import { GithubInstallationStatus } from '../github/github.entities';
 
 const diff = { payload: { missing: ['typescript'] } };
 const ai = { citations: [{ id: 'source-1' }] };
@@ -60,5 +61,57 @@ describe('CareerV1 plan semantic boundary', () => {
       profile,
     );
     expect(tasks[0]?.citationIds).toEqual(['repo-1']);
+  });
+});
+
+describe('CareerV1 candidate profile repository capture', () => {
+  it('accepts synchronized repository facts when the production GitHub provider is enabled', async () => {
+    const installation = {
+      id: 'installation-1',
+      ownerUserId: 'owner-1',
+      status: GithubInstallationStatus.Active,
+    };
+    const repository = {
+      installationId: installation.id,
+      githubRepositoryId: '9000001',
+      fullName: 'fixture/verification-repository',
+      private: true,
+      active: true,
+    };
+    const ai = vi.fn().mockResolvedValue({ result: { findings: [], gaps: [] }, citations: [] });
+    const complete = vi.fn().mockResolvedValue({
+      resource: {
+        resourceType: 'CANDIDATE_PROFILE_SNAPSHOT',
+        resourceId: 'snapshot-1',
+        resourceHref: '/api/career/profile-snapshots/snapshot-1',
+      },
+    });
+    const instance = Object.create(CareerV1WorkflowHandlers.prototype) as CareerV1WorkflowHandlers;
+    Object.assign(instance, {
+      config: { get: vi.fn().mockReturnValue('github') },
+      installations: { find: vi.fn().mockResolvedValue([installation]) },
+      repositories: { find: vi.fn().mockResolvedValue([repository]) },
+      ai,
+      complete,
+    });
+
+    await expect(instance['profile']({
+      id: 'operation-1',
+      ownerId: installation.ownerUserId,
+      input: { repositoryIds: [] },
+    } as never, new AbortController().signal)).resolves.toMatchObject({
+      resource: { resourceType: 'CANDIDATE_PROFILE_SNAPSHOT' },
+    });
+    expect(ai).toHaveBeenCalledOnce();
+    expect(ai.mock.calls[0]?.[5]).toEqual({
+      objective: 'Interpret candidate evidence',
+      evidence: [{
+        id: 'repo-1',
+        title: repository.fullName,
+        url: `https://github.com/${repository.fullName}`,
+        quote: `Repository ${repository.fullName} is available to the installation.`,
+      }],
+    });
+    expect(complete).toHaveBeenCalledOnce();
   });
 });
