@@ -425,9 +425,13 @@ export class GithubClient {
       const values = asArray(body.check_runs);
       for (const value of values) {
         const check = asObject(value);
+        const completedAt = check.completed_at;
         checks.push({
           name: asString(check.name),
-          successful: check.status === 'completed' && check.conclusion === 'success',
+          successful:
+            check.conclusion === 'success' &&
+            typeof completedAt === 'string' &&
+            !Number.isNaN(Date.parse(completedAt)),
         });
       }
       if (values.length < PAGE_SIZE) {

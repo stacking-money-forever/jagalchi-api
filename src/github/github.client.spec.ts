@@ -132,12 +132,13 @@ describe('GithubClient trust boundary', () => {
         { filename: 'tests/proof.spec.ts' }, { filename: 'src/proof.ts' }, { filename: 'src/proof.ts' },
       ]);
       if (url.includes('/check-runs?')) return json({ check_runs: [
-        { name: 'ci/test', status: 'completed', conclusion: 'failure' },
-        { name: 'ci/test', status: 'completed', conclusion: 'success' },
-        { name: 'ci/pending', status: 'in_progress', conclusion: null },
-        { name: 'ci/cancelled', status: 'completed', conclusion: 'cancelled' },
-        { name: 'ci/neutral', status: 'completed', conclusion: 'neutral' },
-        { name: 'ci/timed-out', status: 'completed', conclusion: 'timed_out' },
+        { name: 'ci/test', status: 'completed', conclusion: 'failure', completed_at: '2026-08-25T00:00:00Z' },
+        { name: 'ci/test', status: 'completed', conclusion: 'success', completed_at: '2026-08-25T00:01:00Z' },
+        { name: 'ci/provider-lag', status: 'in_progress', conclusion: 'success', completed_at: '2026-08-25T00:01:00Z' },
+        { name: 'ci/pending', status: 'in_progress', conclusion: null, completed_at: null },
+        { name: 'ci/cancelled', status: 'completed', conclusion: 'cancelled', completed_at: '2026-08-25T00:01:00Z' },
+        { name: 'ci/neutral', status: 'completed', conclusion: 'neutral', completed_at: '2026-08-25T00:01:00Z' },
+        { name: 'ci/timed-out', status: 'completed', conclusion: 'timed_out', completed_at: '2026-08-25T00:01:00Z' },
       ] });
       if (url.includes('/statuses?')) return json([
         { context: 'deploy', state: 'failure' }, { context: 'deploy', state: 'success' },
@@ -153,6 +154,7 @@ describe('GithubClient trust boundary', () => {
       changedPaths: ['src/proof.ts', 'tests/proof.spec.ts'],
       checks: [
         { name: 'ci/test', successful: true },
+        { name: 'ci/provider-lag', successful: true },
         { name: 'ci/pending', successful: false },
         { name: 'ci/cancelled', successful: false },
         { name: 'ci/neutral', successful: false },
